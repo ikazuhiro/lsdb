@@ -61,6 +61,7 @@
 (require 'pces)
 (require 'mime)
 (require 'static)
+(require 'timezone)
 
 ;;;_* USER CUSTOMIZATION VARIABLES:
 (defgroup lsdb nil
@@ -119,7 +120,8 @@ where the last three elements are optional."
     (aka 4 ?,)
     (score -1)
     (x-face -1)
-    (sender -1))
+    (sender -1)
+    (last-date -1))
   "Alist of entry types for presentation.
 The format of elements of this list should be
      (ENTRY SCORE [CLASS READ-ONLY])
@@ -151,14 +153,14 @@ The sender is passed to each function as the argument."
   :group 'lsdb
   :type 'hook)
 
-(defcustom lsdb-update-record-functions
+(defcustom lsdb-after-update-record-functions
   '(lsdb-update-address-cache)
   "List of functions called after a record is updated.
 The updated record is passed to each function as the argument."
   :group 'lsdb
   :type 'hook)
 
-(defcustom lsdb-delete-record-functions
+(defcustom lsdb-after-delete-record-functions
   '(lsdb-delete-address-cache)
   "List of functions called after a record is removed.
 The removed record is passed to each function as the argument."
@@ -250,6 +252,11 @@ Bourne shell or its equivalent \(not tcsh) is needed for \"2>\"."
   "If non-nil, confirm user to submit changes to lsdb-hash-table."
   :type 'boolean
   :group 'lsdb)
+
+(defcustom lsdb-strip-address nil
+  "If non-nil, strip display-name from sender address before completion."
+  :group 'lsdb
+  :type 'boolean)
 
 ;;;_. Faces
 (defface lsdb-header-face
@@ -535,7 +542,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (lsdb-maphash
        (lambda (key value)
 	 (run-hook-with-args
-	  'lsdb-update-record-functions
+	  'lsdb-after-update-record-functions
 	  (cons key value)))
        lsdb-hash-table)))
 
@@ -629,11 +636,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 			       (cdr record)))))
       (lsdb-puthash (car record) (cdr record)
 		    lsdb-hash-table)
-      (run-hook-with-args 'lsdb-update-record-functions record)
+      (run-hook-with-args 'lsdb-after-update-record-functions record)
       (setq lsdb-hash-tables-are-dirty t))
     record))
 
-(defun lsdb-update-records ()
+(defun lsdb-update-records (&optional last-date)
   (lsdb-maybe-load-hash-tables)
   (let (senders recipients interesting alist records bodies entry)
     (save-restriction
@@ -667,6 +674,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 			bodies))
 		interesting))
 	(setq alist (cdr alist))))
+    (if last-date
+	(push (cons 'last-date last-date) interesting))
     (if senders
 	(setq records (list (lsdb-update-record (pop senders) interesting))))
     (setq alist (nconc senders recipients))
@@ -717,23 +726,17 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	(lsdb-fit-window-to-buffer window)))))
 
 (defun lsdb-update-records-and-display ()
-  (let ((records (lsdb-update-records)))
-    (if lsdb-display-records-belong-to-user
-	(if records
-	    (lsdb-display-record (car records))
-	  (lsdb-hide-buffer))
-      (catch 'lsdb-show-record
-	(while records
-	  (if (member user-mail-address (cdr (assq 'net (car records))))
-	      (setq records (cdr records))
-	    (lsdb-display-record (car records))
-	    (throw 'lsdb-show-record t)))
-	(lsdb-hide-buffer)))))
+  (lsdb-maybe-load-hash-tables)
+  (lsdb-display-record (car (lsdb-update-records))))
 
 (defun lsdb-display-record (record)
   "Display only one RECORD, then shrink the window as possible."
-  (let ((temp-buffer-show-function lsdb-temp-buffer-show-function))
-    (lsdb-display-records (list record))))
+  (if (and record
+	   (or lsdb-display-records-belong-to-user
+	       (member user-mail-address (cdr (assq 'net record)))))
+      (let ((temp-buffer-show-function lsdb-temp-buffer-show-function))
+	(lsdb-display-records (list record)))
+    (lsdb-hide-buffer)))
 
 (defun lsdb-display-records (records)
   (with-current-buffer (get-buffer-create lsdb-buffer-name)
@@ -850,8 +853,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 				 (lambda (candidate)
 				   (if (string-match pattern candidate)
 				       candidate))
-				 (append (cdr (assq 'net value))
-					 (cdr (assq 'sender value))))))))
+				 (if lsdb-strip-address
+				     (cdr (assq 'net value))
+				   (append (cdr (assq 'net value))
+					   (cdr (assq 'sender value)))))))))
        lsdb-hash-table)
       ;; Sort candidates by the position where the pattern occurred.
       (setq lsdb-last-candidates
@@ -1012,7 +1017,7 @@ Modify whole identification by side effect."
 (defun lsdb-delete-record (record)
   "Delete given RECORD."
   (lsdb-remhash (car record) lsdb-hash-table)
-  (run-hook-with-args 'lsdb-delete-record-functions record)
+  (run-hook-with-args 'lsdb-after-delete-record-functions record)
   (setq lsdb-hash-tables-are-dirty t))
 
 (defun lsdb-current-entry ()
@@ -1041,7 +1046,7 @@ Modify whole identification by side effect."
   (setcdr record (delq entry (cdr record)))
   (lsdb-puthash (car record) (cdr record)
 		lsdb-hash-table)
-  (run-hook-with-args 'lsdb-update-record-functions record)
+  (run-hook-with-args 'lsdb-after-update-record-functions record)
   (setq lsdb-hash-tables-are-dirty t))
 
 (defun lsdb-mode-add-entry (entry-name)
@@ -1068,7 +1073,7 @@ Modify whole identification by side effect."
 	      (setcdr record (cons (cons ',entry-name form) (cdr record)))
 	      (lsdb-puthash (car record) (cdr record)
 			    lsdb-hash-table)
-	      (run-hook-with-args 'lsdb-update-record-functions record)
+	      (run-hook-with-args 'lsdb-after-update-record-functions record)
 	      (setq lsdb-hash-tables-are-dirty t)
 	      (beginning-of-line 2)
 	      (add-text-properties
@@ -1155,7 +1160,7 @@ then the entire entry will be deleted."
 		 (entry (assq entry-name (cdr record))))
 	    (unless (equal form (cdr entry))
 	      (setcdr entry form)
-	      (run-hook-with-args 'lsdb-update-record-functions record)
+	      (run-hook-with-args 'lsdb-after-update-record-functions record)
 	      (setq lsdb-hash-tables-are-dirty t)
 	      (with-current-buffer lsdb-buffer-name
 		(let ((inhibit-read-only t)
@@ -1190,7 +1195,7 @@ then the entire entry will be deleted."
 	    (lsdb-delete-record record)
 	    (setcar record new-name)
 	    (lsdb-puthash new-name (cdr record) lsdb-hash-table)
-	    (run-hook-with-args 'lsdb-update-record-functions record)
+	    (run-hook-with-args 'lsdb-after-update-record-functions record)
 	    (setq lsdb-hash-tables-are-dirty t)
 	    (with-current-buffer lsdb-buffer-name
 	      (let ((inhibit-read-only t)
@@ -1430,6 +1435,11 @@ of the buffer."
     (set-window-configuration window-configuration)))
 
 ;;;_. Interface to Semi-gnus
+(eval-when-compile
+  (condition-case nil
+      (require 'nnheader)
+    (error)))
+
 ;;;###autoload
 (defun lsdb-gnus-insinuate ()
   "Call this function to hook LSDB into Semi-gnus."
@@ -1438,10 +1448,30 @@ of the buffer."
 
 (defvar gnus-article-current-summary)
 (defvar gnus-original-article-buffer)
+(defvar gnus-current-headers)
 (defun lsdb-gnus-update-record ()
   (with-current-buffer (with-current-buffer gnus-article-current-summary
 			 gnus-original-article-buffer)
-    (lsdb-update-records-and-display)))
+    (lsdb-maybe-load-hash-tables)
+    (let* ((sender (lsdb-extract-address-components
+		    (mail-header-from gnus-current-headers)))
+	   (date (mail-header-date gnus-current-headers))
+	   (current-date (format-time-string "%Y%m%d%H:%M:%S"))
+	   (record (lsdb-gethash (car sender) lsdb-hash-table))
+	   (last-date (or (cdr (assq 'last-date record))
+			  current-date))
+	   article-date)
+      (if (or (null record)
+	      (null date)		;Without Date: header?
+	      (and (string-lessp (setq article-date
+				       (timezone-make-date-sortable date))
+				 current-date)
+		   (string-lessp last-date article-date)))
+	  (setq record (car (lsdb-update-records
+			     (or article-date current-date)))))
+      (lsdb-display-record (if (stringp (car record)) ;Record is up to date.
+			       record
+			     (cons (car sender) record))))))
 
 ;;;_. Interface to Wanderlust
 ;;;###autoload
@@ -1582,7 +1612,7 @@ always hide."
 				    (cdr (car records))))
 	(lsdb-puthash (car (car records)) (cdr (car records))
 		      lsdb-hash-table)
-	(run-hook-with-args 'lsdb-update-record-functions (car records))
+	(run-hook-with-args 'lsdb-after-update-record-functions (car records))
 	(setq lsdb-hash-tables-are-dirty t)))))
 
 (defun lsdb-mu-get-prefix-method ()
