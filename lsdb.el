@@ -133,6 +133,26 @@ entry cannot be modified."
   :group 'lsdb
   :type 'function)
 
+(defcustom lsdb-lookup-full-name-functions
+  '(lsdb-lookup-full-name-from-address-cache)
+  "List of functions to pick up the existing full-name of the sender.
+The sender is passed to each function as the argument."
+  :group 'lsdb
+  :type 'hook)
+
+(defcustom lsdb-update-record-functions
+  '(lsdb-update-address-cache)
+  "List of functions called after a record is updated.
+The updated record is passed to each function as the argument."
+  :group 'lsdb
+  :type 'hook)
+
+(defcustom lsdb-secondary-hash-tables
+  '(lsdb-address-cache)
+  "List of the hash tables for reverse lookup"
+  :group 'lsdb
+  :type 'list)
+
 (defcustom lsdb-window-max-height 7
   "Maximum number of lines used to display LSDB record."
   :group 'lsdb
@@ -228,7 +248,7 @@ Bourne shell or its equivalent \(not tcsh) is needed for \"2>\"."
 (defvar lsdb-hash-table nil
   "Internal hash table to hold LSDB records.")
 
-(defvar lsdb-reverse-hash-table nil
+(defvar lsdb-address-cache nil
   "The reverse lookup table for `lsdb-hash-table'.
 It represents address to full-name mapping.")
 
@@ -304,8 +324,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defconst lsdb-secondary-hash-table-start-format
   ";;; %S\n")
 
-(defmacro lsdb-secondary-hash-table-start (hash-table)
-  `(format lsdb-secondary-hash-table-start-format ',hash-table))
+(defsubst lsdb-secondary-hash-table-start (hash-table)
+  (format lsdb-secondary-hash-table-start-format hash-table))
 
 (eval-and-compile
   (condition-case nil
@@ -341,7 +361,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 (defun lsdb-load-hash-tables ()
   "Read the contents of `lsdb-file' into the internal hash tables."
-  (let ((buffer (find-file-noselect lsdb-file)))
+  (let ((buffer (find-file-noselect lsdb-file))
+	tables)
     (unwind-protect
 	(save-excursion
 	  (set-buffer buffer)
@@ -349,11 +370,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  (re-search-forward "^#s(")
 	  (goto-char (match-beginning 0))
 	  (setq lsdb-hash-table (lsdb-read (point-marker)))
-	  (if (re-search-forward
-	       (concat "^" (lsdb-secondary-hash-table-start
-			    lsdb-reverse-hash-table))
-	       nil t)
-	      (setq lsdb-reverse-hash-table (lsdb-read (point-marker)))))
+	  ;; Load the secondary hash tables following.
+	  (setq tables lsdb-secondary-hash-tables)
+	  (while tables
+	    (if (re-search-forward
+		 (concat "^" (lsdb-secondary-hash-table-start
+			      (car tables)))
+		 nil t)
+		(set (car tables) (lsdb-read (point-marker))))
+	    (setq tables (cdr tables))))
       (kill-buffer buffer))))
 
 (defun lsdb-insert-hash-table (hash-table)
@@ -371,7 +396,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 (defun lsdb-save-hash-tables ()
   "Write the records within the internal hash tables into `lsdb-file'."
-  (let ((coding-system-for-write lsdb-file-coding-system))
+  (let ((coding-system-for-write lsdb-file-coding-system)
+	tables)
     (with-temp-file lsdb-file
       (if (and (or (featurep 'mule)
 		   (featurep 'file-coding))
@@ -386,9 +412,13 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	    (if coding-system-name
 		(insert ";;; -*- coding: " coding-system-name " -*-\n"))))
       (lsdb-insert-hash-table lsdb-hash-table)
-      (insert "\n" (lsdb-secondary-hash-table-start
-		    lsdb-reverse-hash-table))
-      (lsdb-insert-hash-table lsdb-reverse-hash-table))))
+      ;; Save the secondary hash tables following.
+      (setq tables lsdb-secondary-hash-tables)
+      (while tables
+	(insert "\n" (lsdb-secondary-hash-table-start
+		      (car tables)))
+	(lsdb-insert-hash-table (symbol-value (car tables)))
+	(setq tables (cdr tables))))))
 
 ;;;_. Mail Header Extraction
 (defun lsdb-fetch-field-bodies (regexp)
@@ -433,24 +463,73 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (set-buffer-multibyte multibyte))))
 
 ;;;_. Record Management
-(defun lsdb-maybe-build-reverse-hash-table ()
-  (unless lsdb-reverse-hash-table
-    (setq lsdb-reverse-hash-table (lsdb-make-hash-table :test 'equal))
-    (lsdb-maphash
-     (lambda (key value)
-       (let ((net (cdr (assq 'net value))))
-	 (while net
-	   (lsdb-puthash (pop net) key lsdb-reverse-hash-table))))
-     lsdb-hash-table))
-  (setq lsdb-hash-tables-are-dirty t))
+(defun lsdb-maybe-load-secondary-hash-tables ()
+  (let ((tables lsdb-secondary-hash-tables))
+    (while tables
+      (unless (symbol-value (car tables))
+	(set (car tables) (lsdb-make-hash-table :test 'equal))
+	(lsdb-maphash
+	 (lambda (key value)
+	   (run-hook-with-args
+	    'lsdb-update-record-functions
+	    (cons key value)))
+	 lsdb-hash-table)
+	(setq lsdb-hash-tables-are-dirty t))
+      (setq tables (cdr tables)))))
 
 (defun lsdb-maybe-load-hash-tables ()
   (unless lsdb-hash-table
     (if (file-exists-p lsdb-file)
 	(lsdb-load-hash-tables)
       (setq lsdb-hash-table (lsdb-make-hash-table :test 'equal)))
-    (lsdb-maybe-build-reverse-hash-table)))
+    (lsdb-maybe-load-secondary-hash-tables)))
 
+;;;_ : Fallback Lookup Functions
+;;;_  , #1 Address Cache
+(defun lsdb-lookup-full-name-from-address-cache (sender)
+  (lsdb-gethash (nth 1 sender) lsdb-address-cache))
+
+(defun lsdb-update-address-cache (record)
+  (let ((net (cdr (assq 'net record))))
+    (while net
+      (lsdb-puthash (pop net) (car record) lsdb-address-cache))))
+
+;;;_  , #2 Iterate on the All Records (very slow)
+(defun lsdb-lookup-full-name-by-fuzzy-matching (sender)
+  (let ((names
+	 (if (string-match
+	      "\\`\\(.+\\)[ \t]+\\(/[ \t]+\\|(\\([^)]+\\))\\)"
+	      (car sender))
+	     (if (match-beginning 3)
+		 (list (match-string 1 (car sender))
+		       (match-string 3 (car sender)))
+	       (list (match-string 1 (car sender))
+		     (substring (car sender) (match-end 0))))
+	   (list (car sender))))
+	(case-fold-search t))
+    (catch 'found
+      (lsdb-maphash
+       (lambda (key value)
+	 (while names
+	   (if (or (string-match
+		    (concat "\\<" (regexp-quote (car names)) "\\>")
+		    key)
+		   (string-match
+		    (concat
+		     "\\<"
+		     (regexp-quote
+		      (mapconcat #'identity
+				 (nreverse (split-string (car names)))
+				 " "))
+		     "\\>")
+		    key)
+		   ;; Don't assume that we are using address cache.
+		   (member (nth 1 sender) (cdr (assq 'net value))))
+	       (throw 'found key))
+	   (setq names (cdr names))))
+       lsdb-hash-table))))
+
+;;;_ : Update Records
 (defun lsdb-update-record (sender &optional interesting)
   (let ((old (lsdb-gethash (car sender) lsdb-hash-table))
 	(new (cons (cons 'net (list (nth 1 sender)))
@@ -461,7 +540,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     ;; Look for the existing record from the reverse hash table.
     ;; If it is found, regsiter the current full-name as AKA.
     (unless old
-      (setq full-name (lsdb-gethash (nth 1 sender) lsdb-reverse-hash-table))
+      (setq full-name
+	    (run-hook-with-args-until-success
+	     'lsdb-lookup-full-name-functions
+	     sender))
       (when full-name
 	(setq old (lsdb-gethash full-name lsdb-hash-table)
 	      new (cons (list 'aka (car sender)) new))
@@ -480,8 +562,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 			       (cdr record)))))
       (lsdb-puthash (car record) (cdr record)
 		    lsdb-hash-table)
+      (run-hook-with-args 'lsdb-update-record-functions record)
       (setq lsdb-hash-tables-are-dirty t))
-    (lsdb-puthash (nth 1 sender) (car sender) lsdb-reverse-hash-table)
     record))
 
 (defun lsdb-update-records ()
@@ -620,6 +702,29 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defvar lsdb-last-candidates nil)
 (defvar lsdb-last-candidates-pointer nil)
 
+;;;_ : Matching Highlight
+(defvar lsdb-last-highlight-overlay nil)
+
+(defun lsdb-complete-name-highlight (start end)
+  (make-local-hook 'pre-command-hook)
+  (add-hook 'pre-command-hook 'lsdb-complete-name-highlight-update nil t)
+  (save-excursion
+    (goto-char start)
+    (search-forward lsdb-last-completion end)
+    (setq lsdb-last-highlight-overlay
+	  (make-overlay (match-beginning 0) (match-end 0)))
+    (overlay-put lsdb-last-highlight-overlay 'face
+		 (or (find-face 'isearch-secondary)
+		     'underline))))
+
+(defun lsdb-complete-name-highlight-update ()
+  (unless (eq 'this-command 'lsdb-complete-name)
+    (if lsdb-last-highlight-overlay
+	(delete-overlay lsdb-last-highlight-overlay))
+    (remove-hook 'pre-command-hook
+		 'lsdb-complete-name-highlight-update t)))
+
+;;;_ : Name Completion
 (defun lsdb-complete-name ()
   "Complete the user full-name or net-address before point"
   (interactive)
@@ -636,7 +741,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (setq lsdb-last-candidates nil
 	    lsdb-last-candidates-pointer nil
 	    lsdb-last-completion (buffer-substring start (point))
-	    pattern (concat "\\<" lsdb-last-completion))
+	    pattern (concat "\\<" (regexp-quote lsdb-last-completion)))
       (lsdb-maphash
        (lambda (key value)
 	 (let ((net (cdr (assq 'net value))))
@@ -665,7 +770,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (setq lsdb-last-candidates-pointer lsdb-last-candidates))
     (when lsdb-last-candidates-pointer
       (delete-region start (point))
-      (insert (pop lsdb-last-candidates-pointer)))))
+      (insert (pop lsdb-last-candidates-pointer))
+      (lsdb-complete-name-highlight start (point)))))
 
 ;;;_. Major Mode (`lsdb-mode') Implementation
 ;;;_ : Modeline Buffer Identification
@@ -771,8 +877,8 @@ Modify whole identification by side effect."
       (font-lock-set-defaults)
     (set (make-local-variable 'font-lock-defaults)
 	 '(lsdb-font-lock-keywords t)))
-  (make-local-variable 'post-command-hook)
-  (setq post-command-hook 'lsdb-modeline-update)
+  (make-local-hook 'post-command-hook)
+  (add-hook 'post-command-hook 'lsdb-modeline-update nil t)
   (make-local-variable 'lsdb-modeline-string)
   (setq mode-line-buffer-identification
 	(lsdb-modeline-buffer-identification
@@ -850,6 +956,7 @@ the current record."
 	      (setcdr record (cons (cons ',entry-name form) (cdr record)))
 	      (lsdb-puthash (car record) (cdr record)
 			    lsdb-hash-table)
+	      (run-hook-with-args 'lsdb-update-record-functions record)
 	      (setq lsdb-hash-tables-are-dirty t)
 	      (beginning-of-line 2)
 	      (add-text-properties
@@ -872,6 +979,7 @@ the current record."
       (setcdr record (delq entry (cdr record)))
       (lsdb-puthash (car record) (cdr record)
 		    lsdb-hash-table)
+      (run-hook-with-args 'lsdb-update-record-functions record)
       (setq lsdb-hash-tables-are-dirty t))
     (save-restriction
       (lsdb-narrow-to-record)
@@ -909,6 +1017,7 @@ the current record."
 		   (inhibit-read-only t)
 		   buffer-read-only)
 	      (setcdr entry form)
+	      (run-hook-with-args 'lsdb-update-record-functions record)
 	      (setq lsdb-hash-tables-are-dirty t)
 	      (lsdb-mode-delete-entry (symbol-name ',entry-name) t)
 	      (beginning-of-line)
@@ -1195,6 +1304,7 @@ of the buffer."
 				    (cdr (car records))))
 	(lsdb-puthash (car (car records)) (cdr (car records))
 		      lsdb-hash-table)
+	(run-hook-with-args 'lsdb-update-record-functions (car records))
 	(setq lsdb-hash-tables-are-dirty t)))))
 
 (defun lsdb-mu-get-prefix-method ()
