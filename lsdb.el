@@ -100,6 +100,7 @@
     ("\\(X-URL\\|X-URI\\)" nil www)
     ("X-Attribution\\|X-cite-me" nil attribution)
     ("X-Face" nil x-face)
+    ("Face" nil face)
     (,lsdb-sender-headers nil sender))
   "Alist of headers we are interested in.
 The format of elements of this list should be
@@ -119,6 +120,7 @@ where the last three elements are optional."
     (aka 4 ?,)
     (score -1)
     (x-face -1)
+    (face -1)
     (sender -1))
   "Alist of entry types for presentation.
 The format of elements of this list should be
@@ -203,7 +205,35 @@ The compressed face will be piped to this command."
   :group 'lsdb
   :type 'function)
 
-(defcustom lsdb-print-record-hook '(lsdb-expose-x-face)
+(defcustom lsdb-face-image-type nil
+  "A image type of displayed face.
+If non-nil, supersedes the return value of `lsdb-x-face-available-image-type'."
+  :group 'lsdb
+  :type 'symbol)
+
+(defcustom lsdb-face-command-alist
+  '((png "pngtopnm | pnmscale 0.5 | pnmtopng")
+    (xpm "pngtopnm | pnmscale 0.5 | ppmtoxpm"))
+  "An alist from an image type to a command to be executed to display a Face header.
+The command will be executed in a sub-shell asynchronously.
+The decoded field-body (actually a PNG data) will be piped to this command."
+  :group 'lsdb
+  :type 'list)
+
+(defcustom lsdb-insert-face-function
+  (if (static-if (featurep 'xemacs)
+	  (or (featurep 'png)
+	      (featurep 'xpm))
+	(and (>= emacs-major-version 21)
+	     (fboundp 'image-type-available-p)
+	     (or (image-type-available-p 'png)
+		 (image-type-available-p 'xpm))))
+      #'lsdb-insert-face-asynchronously)
+  "Function to display Face."
+  :group 'lsdb
+  :type 'function)
+
+(defcustom lsdb-print-record-hook '(lsdb-expose-x-face lsdb-expose-face)
   "A hook called after a record is displayed."
   :group 'lsdb
   :type 'hook)
@@ -609,8 +639,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 ;;;_ : Update Records
 (defun lsdb-update-record (sender &optional interesting)
   (let ((old (lsdb-gethash (car sender) lsdb-hash-table))
-	(new (cons (cons 'net (list (nth 1 sender)))
-		   interesting))
+	(new (if (nth 1 sender)
+		 (cons (cons 'net (list (nth 1 sender)))
+		       interesting)
+	       interesting))
 	merged
 	record
 	full-name)
@@ -1760,6 +1792,100 @@ the user wants it."
 		  (lsdb-insert-x-face-image data ',type ,marker)
 		  (lsdb-puthash ,x-face (list (cons ',type data))
 				lsdb-x-face-cache)))
+	    (kill-buffer (process-buffer process))))))))
+
+;;;_. Face Rendering
+(defvar lsdb-face-cache
+  (lsdb-make-hash-table :test 'equal))
+
+(defun lsdb-face-available-image-type ()
+  (static-if (featurep 'xemacs)
+      (if (featurep 'png)
+	  'png
+	(if (featurep 'xpm)
+	    'xpm))
+    (and (>= emacs-major-version 21)
+	 (fboundp 'image-type-available-p)
+	 (if (image-type-available-p 'png)
+	     'png
+	   (if (image-type-available-p 'xpm)
+	       'xpm)))))
+
+(defun lsdb-expose-face ()
+  (let* ((record (get-text-property (point-min) 'lsdb-record))
+	 (face (cdr (assq 'face (cdr record))))
+	 (delimiter "\r "))
+    (when (and lsdb-insert-face-function
+	       face)
+      (goto-char (point-min))
+      (end-of-line)
+      (put-text-property 0 1 'invisible t delimiter) ;hide "\r"
+      (put-text-property
+       (point)
+       (progn
+	 (insert delimiter)
+	 (while face
+	   (funcall lsdb-insert-face-function (pop face)))
+	 (point))
+       'lsdb-record record))))
+
+(defun lsdb-insert-face-image (data type marker)
+  (static-if (featurep 'xemacs)
+      (save-excursion
+	(set-buffer (marker-buffer marker))
+	(goto-char marker)
+	(let* ((inhibit-read-only t)
+	       buffer-read-only
+	       (glyph (make-glyph (vector type :data data))))
+	  (set-extent-begin-glyph
+	   (make-extent (point) (point))
+	   glyph)))
+    (save-excursion
+      (set-buffer (marker-buffer marker))
+      (goto-char marker)
+      (let* ((inhibit-read-only t)
+	     buffer-read-only
+	     (image (create-image data type t :ascent 'center))
+	     (record (get-text-property (point) 'lsdb-record)))
+	(put-text-property (point) (progn
+				     (insert-image image)
+				     (point))
+			   'lsdb-record record)))))
+
+(defun lsdb-insert-face-asynchronously (face)
+  (let* ((type (or lsdb-face-image-type
+		   (lsdb-face-available-image-type)))
+	 (shell-file-name lsdb-shell-file-name)
+	 (shell-command-switch lsdb-shell-command-switch)
+	 (coding-system-for-read 'binary)
+	 (coding-system-for-write 'binary)
+	 (process-connection-type nil)
+	 (cached (cdr (assq type (lsdb-gethash face lsdb-face-cache))))
+	 (marker (point-marker))
+	 process)
+    (if cached
+	(lsdb-insert-face-image cached type marker)
+      (setq process
+	    (start-process-shell-command
+	     "lsdb-face-command" (generate-new-buffer " *lsdb work*")
+	     (concat "{ "
+		     (nth 1 (assq type lsdb-face-command-alist))
+		     "; } 2> /dev/null")))
+      (process-send-string process (base64-decode-string face))
+      (process-send-eof process)
+      (set-process-sentinel
+       process
+       `(lambda (process string)
+	  (unwind-protect
+	      (when (and (buffer-live-p (marker-buffer ,marker))
+			 (equal string "finished\n"))
+		(let ((data
+		       (with-current-buffer (process-buffer process)
+			 (set-buffer-multibyte nil)
+			 (buffer-string))))
+		  (lsdb-insert-face-image data ',type ,marker)
+		  (lsdb-puthash ,face (list (cons ',type data))
+				lsdb-face-cache)))
 	    (kill-buffer (process-buffer process))))))))
 
 (require 'product)
