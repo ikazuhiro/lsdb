@@ -1912,7 +1912,7 @@ the user wants it."
 (provide 'lsdb)
 
 (product-provide 'lsdb
-  (product-define "LSDB" nil '(0 10)))
+  (product-define "LSDB" nil '(0 11)))
 
 ;;;_* Local emacs vars.
 ;;; The following `allout-layout' local variable setting:
