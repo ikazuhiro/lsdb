@@ -34,7 +34,8 @@ install-package:	package
 	$(XEMACS) $(FLAGS) -f install-lsdb-package $(PACKAGEDIR)
 
 ChangeLog: $(filter-out ChangeLog CVS, $(wildcard *))
-	cvs2cl --prune --no-wrap --usermap ./cvs2cl/usermap --gmt --stdout | \
+	cvs2cl --prune --no-wrap --usermap ./cvs2cl/usermap --gmt --stdout \
+		--ignore '\.tdldb' | \
 	ruby -p -i ./cvs2cl/fmtlog.rb > $@
 
 .PHONY: clean distclean
