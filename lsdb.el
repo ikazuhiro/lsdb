@@ -536,6 +536,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defun lsdb-wl-insinuate ()
   "Call this function to hook LSDB into Wanderlust."
   (add-hook 'wl-message-redisplay-hook 'lsdb-wl-update-record)
+  (add-hook 'wl-summary-exit-hook 'lsdb-wl-hide-buffer)
   (add-hook 'wl-exit-hook 'lsdb-offer-save))
 
 (defun lsdb-wl-update-record ()
@@ -544,6 +545,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (let ((records (lsdb-update-records)))
       (when records
 	(lsdb-display-record (car records))))))
+
+(defun lsdb-wl-hide-buffer ()
+  (let ((window (get-buffer-window lsdb-buffer-name)))
+    (if window
+	(delete-window window))))
 
 (provide 'lsdb)
 
