@@ -1109,7 +1109,7 @@ Modify whole identification by side effect."
     (when (and entry
 	       (or (not lsdb-verbose)
 		   (y-or-n-p
-		    (format "Do you really want to delete entry `%s' of `%s'?"
+		    (format "Do you really want to delete entry `%s' of `%s'? "
 			    entry-name (car record)))))
       (lsdb-delete-entry record entry)
       (lsdb-mode-delete-entry-1 entry))))
@@ -1122,7 +1122,7 @@ Modify whole identification by side effect."
       (error "%s" "There is nothing to follow here"))
     (when (or (not lsdb-verbose)
 	      (yes-or-no-p
-	       (format "Do you really want to delete entire record of %s? "
+	       (format "Do you really want to delete entire record of `%s'? "
 		       (car record))))
       (lsdb-delete-record record)
       (save-restriction
