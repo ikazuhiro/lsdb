@@ -73,7 +73,7 @@
   :group 'lsdb
   :type 'file)
 
-(defcustom lsdb-file-coding-system (find-coding-system 'iso-2022-jp)
+(defcustom lsdb-file-coding-system (find-coding-system 'ctext)
   "Coding system for `lsdb-file'."
   :group 'lsdb
   :type 'symbol)
