@@ -1045,7 +1045,8 @@ of the buffer."
   "Call this function to hook LSDB into Wanderlust."
   (add-hook 'wl-message-redisplay-hook 'lsdb-wl-update-record)
   (add-hook 'wl-summary-exit-hook 'lsdb-mode-hide-buffer)
-  (add-hook 'wl-exit-hook 'lsdb-mode-save))
+  (add-hook 'wl-exit-hook 'lsdb-mode-save)
+  (add-hook 'wl-save-hook 'lsdb-mode-save))
 
 (eval-when-compile
   (autoload 'wl-message-get-original-buffer "wl-message"))
