@@ -684,11 +684,13 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	       (list 'lsdb-record record)))))))))
 
 (defun lsdb-mode-save ()
+  "Save LSDB hash table into `lsdb-file'."
   (interactive)
-  (if (and lsdb-hash-table-is-dirty
-	   (or (interactive-p)
-	       (y-or-n-p "Save the LSDB now?")))
-      (lsdb-save-file lsdb-file lsdb-hash-table)))
+  (if (not lsdb-hash-table-is-dirty)
+      (message "(No changes need to be saved)")
+    (if (or (interactive-p)
+	    (y-or-n-p "Save the LSDB now?"))
+	(lsdb-save-file lsdb-file lsdb-hash-table))))
 
 ;;;_ : Edit Forms -- stolen (and renamed) from gnus-eform.el
 (defvar lsdb-edit-form-buffer "*LSDB edit form*")
