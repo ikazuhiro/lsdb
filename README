@@ -62,6 +62,9 @@ If you use Semi-gnus or its variant, put the following lines into your
 (add-hook 'message-setup-hook
           (lambda ()
              (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
+(add-hook 'gnus-summary-mode-hook
+          (lambda ()
+            (define-key gnus-summary-mode-map ":" 'lsdb-toggle-buffer)))
 
 If you use Wanderlust, put the following lines into your ~/.wl:
 (require 'lsdb)
@@ -69,13 +72,19 @@ If you use Wanderlust, put the following lines into your ~/.wl:
 (add-hook 'wl-draft-mode-hook
           (lambda ()
              (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
+(add-hook 'wl-summary-mode-hook
+          (lambda ()
+            (define-key wl-summary-mode-map ":" 'lsdb-toggle-buffer)))
 
 If you use Mew, put the following lines into your ~/.mew:
 (autoload 'lsdb-mew-insinuate "lsdb")
 (add-hook 'mew-init-hook 'lsdb-mew-insinuate)
 (add-hook 'mew-draft-mode-hook
           (lambda ()
-             (define-key mew-draft-header-map "\M-\t" 'lsdb-complete-name)))
+             (define-key mew-draft-header-map "\M-I" 'lsdb-complete-name)))
+(add-hook 'mew-summary-mode-hook
+          (lambda ()
+            (define-key mew-summary-mode-map ":" 'lsdb-toggle-buffer)))
 
 If you use MU-CITE, put the following lines into your ~/.emacs:
 (autoload 'lsdb-mu-insinuate "lsdb")
@@ -89,7 +98,7 @@ functions, set lsdb-insert-x-face-function as follows:
 	(require 'x-face-e21)
 	(insert-image (x-face-create-image x-face :scale-factor 0.5))))
 
-.* Bug reports
+.* Bug Reports
 If you found bugs, please drop a note to the Lsdb-info Mailing List:
 
    lsdb-info@lists.sourceforge.jp
@@ -187,6 +196,12 @@ password.  you can commit with the cvsroot
 
 We hope you will join the open development.
  
+
+.* Authors
+Daiki Ueno <ueno@unixuser.org>
+Hideyuki SHIRAI <shirai@rdmg.mgcs.mei.co.jp> (support for Mew)
+Yuuichi Teranishi <teranisi@gohome.org>
+
 .* Local emacs vars.
 The following `outline-layout' local variable setting:
   - closes all topics from the first topic to just before the third-to-last,
