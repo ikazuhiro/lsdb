@@ -106,7 +106,7 @@ where the last three elements are optional."
     (attribution 4 ?.)
     (organization 4)
     (www 4)
-    (aka 4)
+    (aka 4 ?,)
     (score -1)
     (x-face -1))
   "Alist of entry types for presentation.
@@ -715,6 +715,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  (make-overlay (match-beginning 0) (match-end 0)))
     (overlay-put lsdb-last-highlight-overlay 'face
 		 (or (find-face 'isearch-secondary)
+		     (find-face 'isearch-lazy-highlight-face)
 		     'underline))))
 
 (defun lsdb-complete-name-highlight-update ()

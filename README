@@ -141,7 +141,7 @@ LSDB can also have one or more number of secondary hash tables.  These
 hash tables are mainly used to hint lsdb-hash-table to gather
 additional relationship information between record name and entries.
 For example, lsdb-address-cache is a kind of secondary hash table
-which holds the mapping of mail addresses to record names.
+which maintains the mapping of mail addresses to record names.
 
 The variable lsdb-secondary-hash-tables holds a list where each
 element is corresponding to the name of global variable such as
