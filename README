@@ -137,11 +137,11 @@ write the following expression to get the record for "Daiki Ueno":
  (user-agent "T-gnus/6.15.6 (based on Oort Gnus v0.06) (revision 03)"))
 
 . : Secondary Hash Tables
-LSDB can also have one or more number of secondary hash tables.  These
-hash tables are mainly used to hint lsdb-hash-table to gather
-additional relationship information between record name and entries.
-For example, lsdb-address-cache is a kind of secondary hash table
-which maintains the mapping of mail addresses to record names.
+LSDB can also have one or more secondary hash tables.  These hash
+tables are mainly used to hint lsdb-hash-table to gather additional
+relationship information between record name and entries.  For
+example, lsdb-address-cache is a kind of secondary hash table which
+maintains the mapping of mail addresses to record names.
 
 The variable lsdb-secondary-hash-tables holds a list where each
 element is corresponding to the name of global variable such as
