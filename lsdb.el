@@ -114,12 +114,6 @@ where the last element is optional."
   :group 'lsdb
   :type 'function)
 
-(defcustom lsdb-print-record-function
-  #'lsdb-print-record
-  "Function to print LSDB record."
-  :group 'lsdb
-  :type 'function)
-
 (defcustom lsdb-window-max-height 7
   "Maximum number of lines used to display LSDB record."
   :group 'lsdb
@@ -128,7 +122,10 @@ where the last element is optional."
 (defcustom lsdb-insert-x-face-function
   (if (and (>= emacs-major-version 21)
 	   (locate-library "x-face-e21"))
-      #'lsdb-insert-x-face-with-x-face-e21)
+      #'lsdb-insert-x-face-with-x-face-e21
+    (if (and (featurep 'xemacs)
+	     (memq 'xface (image-instantiator-format-list)))
+	#'lsdb-insert-x-face-with-xemacs-glyph))
   "Function to display X-Face."
   :group 'lsdb
   :type 'function)
@@ -184,6 +181,7 @@ where the last element is optional."
 (put 'lsdb-mode 'font-lock-defaults '(lsdb-font-lock-keywords t))
 
 ;;;_* CODE - no user customizations below
+;;;_. Internal Variables
 (defvar lsdb-hash-table nil
   "Internal hash table to hold LSDB records.")
 
@@ -192,6 +190,10 @@ where the last element is optional."
 
 (defvar lsdb-hash-table-is-dirty nil
   "Flag to indicate whether the hash table needs to be saved.")
+
+(defvar lsdb-known-entry-names
+  (make-vector 29 0)
+  "An obarray used to complete an entry name.")
 
 ;;;_. Hash Table Emulation
 (if (fboundp 'make-hash-table)
@@ -452,8 +454,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (shrink-window-if-larger-than-buffer)
       (if (> (setq height (window-height))
 	     lsdb-window-max-height)
-	  (shrink-window (- height lsdb-window-max-height))
-	  (shrink-window-if-larger-than-buffer)))))
+	  (shrink-window (- height lsdb-window-max-height)))
+      (set-window-start window (point-min)))))
 
 (defun lsdb-display-record (record)
   "Display only one RECORD, then shrink the window as possible."
@@ -467,10 +469,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (while records
       (save-restriction
 	(narrow-to-region (point) (point))
-	(funcall lsdb-print-record-function (car records))
+	(lsdb-print-record (car records))
 	(add-text-properties (point-min) (point-max)
 			     (list 'lsdb-record (car records)))
 	(run-hooks 'lsdb-display-record-hook))
+      (goto-char (point-max))
       (setq records (cdr records)))
     (lsdb-mode)))
 
@@ -478,15 +481,17 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (or (nth 1 (assq (car entry) lsdb-entry-type-alist)) 0))
 
 (defun lsdb-insert-entry (entry)
-  (insert "\t" (capitalize (symbol-name (car entry))) ": "
-	  (if (listp (cdr entry))
-	      (mapconcat
-	       #'identity (cdr entry)
-	       (if (eq ?, (nth 2 (assq (car entry) lsdb-entry-type-alist)))
-		   ", "
-		 "\n\t\t"))
-	    (cdr entry))
-	  "\n"))
+  (let ((entry-name (capitalize (symbol-name (car entry)))))
+    (intern entry-name lsdb-known-entry-names)
+    (insert "\t" entry-name ": "
+	    (if (listp (cdr entry))
+		(mapconcat
+		 #'identity (cdr entry)
+		 (if (eq ?, (nth 2 (assq (car entry) lsdb-entry-type-alist)))
+		     ", "
+		   "\n\t\t"))
+	      (cdr entry))
+	    "\n")))
 
 (defun lsdb-print-record (record)
   (insert (car record) "\n")
@@ -551,16 +556,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (define-key keymap "e" 'lsdb-mode-edit-entry)
     (define-key keymap "s" 'lsdb-mode-save)
     (define-key keymap "q" 'lsdb-mode-quit-window)
+    (define-key keymap "g" 'lsdb-mode-lookup)
+    (define-key keymap "p" 'lsdb-mode-previous-record)
+    (define-key keymap "n" 'lsdb-mode-next-record)
     keymap)
   "LSDB's keymap.")
-
-(if (commandp 'quit-window)
-    (defalias 'lsdb-mode-quit-window 'quit-window)
-  (defun lsdb-mode-quit-window ()
-    (interactive)
-    (if (one-window-p)
-	(bury-buffer)
-      (delete-window))))
 
 (define-derived-mode lsdb-mode fundamental-mode "LSDB"
   "Major mode for browsing LSDB records."
@@ -574,10 +574,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 (defun lsdb-narrow-to-record ()
   (narrow-to-region
-   (or (previous-single-property-change (point) 'lsdb-record)
-       (point-min))
-   (or (next-single-property-change (point) 'lsdb-record)
-       (point-max))))
+   (previous-single-property-change (point) 'lsdb-record nil (point-min))
+   (next-single-property-change (point) 'lsdb-record nil (point-max)))
+  (goto-char (point-min)))
 
 (defun lsdb-current-entry ()
   (save-excursion
@@ -586,7 +585,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	(let ((record (get-text-property (point) 'lsdb-record))
 	      (completion-ignore-case t))
 	  (completing-read
-	   "Which entry to edit: "
+	   "Which entry to modify: "
 	   (mapcar (lambda (entry)
 		     (list (capitalize (symbol-name (car entry)))))
 		   (cdr record))))
@@ -596,7 +595,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 (defun lsdb-mode-add-entry (entry-name)
   "Add an entry on the current line."
-  (interactive "sEntry name: ")
+  (interactive
+   (let ((completion-ignore-case t))
+     (list (completing-read "Entry name: " lsdb-known-entry-names))))
   (beginning-of-line)
   (unless (symbolp entry-name)
     (setq entry-name (intern (downcase entry-name))))
@@ -610,7 +611,6 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  (save-excursion
 	    (set-buffer lsdb-buffer-name)
 	    (goto-char ,marker)
-	    (beginning-of-line)
 	    (let* ((record (get-text-property (point) 'lsdb-record))
 		   (inhibit-read-only t)
 		   buffer-read-only)
@@ -618,7 +618,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	      (lsdb-puthash (car record) (cdr record)
 			    lsdb-hash-table)
 	      (setq lsdb-hash-table-is-dirty t)
-	      (beginning-of-line)
+	      (beginning-of-line 2)
 	      (add-text-properties
 	       (point)
 	       (progn
@@ -694,7 +694,81 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (when (or (interactive-p)
 	      (y-or-n-p "Save the LSDB now?"))
       (lsdb-save-file lsdb-file lsdb-hash-table)
-      (setq lsdb-hash-table-is-dirty nil))))
+      (setq lsdb-hash-table-is-dirty nil)
+      (message "The LSDB was saved successfully."))))
+
+(if (commandp 'quit-window)
+    (defalias 'lsdb-mode-quit-window 'quit-window)
+  (defun lsdb-mode-quit-window ()
+    "Quit the current buffer."
+    (interactive)
+    (if (one-window-p)
+	(bury-buffer)
+      (delete-window))))
+
+(defvar lsdb-mode-lookup-history nil)
+
+(defun lsdb-mode-lookup (regexp &optional entry-name)
+  "Display all entries in the LSDB matching the REGEXP."
+  (interactive
+   (let* ((completion-ignore-case t)
+	  (entry-name
+	   (if current-prefix-arg
+	       (completing-read "Entry name: "
+				lsdb-known-entry-names))))
+     (list
+      (read-from-minibuffer
+       (if entry-name
+	   (format "Search records `%s' regexp: " entry-name)
+	 "Search records regexp: ")
+       nil nil nil 'lsdb-mode-lookup-history)
+      entry-name)))
+  (let (records)
+    (lsdb-maphash
+     (if entry-name
+	 (lambda (key value)
+	   (let ((entry (cdr (assq (intern (downcase entry-name))
+				   value)))
+		 found)
+	     (unless (listp entry)
+	       (setq entry (list entry)))
+	     (while (and (not found) entry)
+	       (if (string-match regexp (pop entry))
+		   (setq found t)))
+	     (if found
+		 (push (cons key value) records))))
+       (lambda (key value)
+	 (if (string-match regexp key)
+	     (push (cons key value) records))))
+     lsdb-hash-table)
+    (lsdb-display-records records)))
+
+;;;###autoload
+(defalias 'lsdb 'lsdb-mode-lookup)
+
+(defun lsdb-mode-next-record (&optional arg)
+  "Go to the next record."
+  (interactive "p")
+  (unless arg				;called noninteractively?
+    (setq arg 1))
+  (if (< arg 0)
+      (lsdb-mode-previous-record (- arg))
+    (while (> arg 0)
+      (goto-char (next-single-property-change
+		  (point) 'lsdb-record nil (point-max)))
+      (setq arg (1- arg)))))
+
+(defun lsdb-mode-previous-record (&optional arg)
+  "Go to the previous record."
+  (interactive "p")
+  (unless arg				;called noninteractively?
+    (setq arg 1))
+  (if (< arg 0)
+      (lsdb-mode-next-record (- arg))
+    (while (> arg 0)
+      (goto-char (previous-single-property-change
+		  (point) 'lsdb-record nil (point-min)))
+      (setq arg (1- arg)))))
 
 ;;;_ : Edit Forms -- stolen (and renamed) from gnus-eform.el
 (defvar lsdb-edit-form-buffer "*LSDB edit form*")
@@ -786,6 +860,7 @@ of the buffer."
 	(lsdb-display-record (car records))))))
 
 ;;;_. Interface to Wanderlust
+;;;###autoload
 (defun lsdb-wl-insinuate ()
   "Call this function to hook LSDB into Wanderlust."
   (add-hook 'wl-message-redisplay-hook 'lsdb-wl-update-record)
@@ -807,12 +882,16 @@ of the buffer."
 ;;;_. X-Face Rendering
 (defun lsdb-expose-x-face ()
   (let* ((record (get-text-property (point-min) 'lsdb-record))
-	 (x-face (cdr (assq 'x-face (cdr record)))))
+	 (x-face (cdr (assq 'x-face (cdr record))))
+	 (limit "\r"))
     (when (and lsdb-insert-x-face-function
 	       x-face)
       (goto-char (point-min))
       (end-of-line)
-      (insert (propertize "\r" 'invisible t) " ")
+      (if (fboundp 'propertize)
+	  (insert (propertize limit 'invisible t) " ")
+	(put-text-property 0 1 'invisible t limit)
+	(insert limit " "))
       (while x-face
 	(funcall lsdb-insert-x-face-function (pop x-face))))))
 
@@ -826,7 +905,20 @@ See also `x-face-scale-factor'.")
   (insert-image (x-face-create-image
 		 x-face :scale-factor lsdb-x-face-scale-factor)))
 
+(defun lsdb-insert-x-face-with-xemacs-glyph (x-face)
+  (let ((glyph
+	 (make-glyph
+	  (vector 'xface :data (concat "X-Face: " x-face)))))
+    (if glyph
+	(set-extent-end-glyph
+	 (make-extent (point) (point))
+	 glyph))))
+
+(require 'product)
 (provide 'lsdb)
+
+(product-provide 'lsdb
+  (product-define "LSDB" nil '(0 1)))
 
 ;;;_* Local emacs vars.
 ;;; The following `outline-layout' local variable setting:
