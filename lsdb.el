@@ -1134,17 +1134,20 @@ the user wants it."
 (defun lsdb-expose-x-face ()
   (let* ((record (get-text-property (point-min) 'lsdb-record))
 	 (x-face (cdr (assq 'x-face (cdr record))))
-	 (limit "\r"))
+	 (limit "\r")
+	 point)
     (when (and lsdb-insert-x-face-function
 	       x-face)
       (goto-char (point-min))
       (end-of-line)
+      (setq point (point))
       (if (fboundp 'propertize)
 	  (insert (propertize limit 'invisible t) " ")
 	(put-text-property 0 1 'invisible t limit)
 	(insert limit " "))
       (while x-face
-	(funcall lsdb-insert-x-face-function (pop x-face))))))
+	(funcall lsdb-insert-x-face-function (pop x-face)))
+      (put-text-property point (point) 'lsdb-record record))))
 
 (defun lsdb-insert-x-face-image (data marker)
   (static-if (featurep 'xemacs)
