@@ -1,0 +1,69 @@
+;;; -*-Emacs-Lisp-*-
+
+;; LSDB-MK: installer for LSDB.
+
+;;; Code:
+
+(defun config-lsdb ()
+  (let (prefix lisp-dir)
+    (and (setq prefix (car command-line-args-left))
+	 (or (string-equal "NONE" prefix)
+	     (defvar PREFIX prefix)))
+    (setq command-line-args-left (cdr command-line-args-left))
+    (and (setq lisp-dir (car command-line-args-left))
+	 (or (string-equal "NONE" lisp-dir)
+	     (defvar LISPDIR lisp-dir)))
+    (setq command-line-args-left (cdr command-line-args-left))
+    (load-file "LSDB-CFG")
+    (load-file "LSDB-ELS")
+
+    (princ (format "PREFIX=%s
+LISPDIR=%s\n" PREFIX LISPDIR))))
+
+(defun compile-lsdb ()
+  (config-lsdb)
+  (compile-elisp-modules lsdb-modules "."))
+
+(defun install-lsdb ()
+  (config-lsdb)
+  (install-elisp-modules lsdb-modules "./" LSDB_DIR))
+
+(defun config-lsdb-package ()
+  (let (package-dir)
+    (and (setq package-dir (car command-line-args-left))
+	 (or (string= "NONE" package-dir)
+	     (defvar PACKAGEDIR package-dir)))
+    (setq command-line-args-left (cdr command-line-args-left))
+    (load-file "LSDB-CFG")
+    (load-file "LSDB-ELS")
+
+    (princ (format "PACKAGEDIR=%s\n" PACKAGEDIR))))
+
+(defun compile-lsdb-package ()
+  (config-lsdb-package)
+
+  (setq autoload-package-name "lsdb")
+  (add-to-list 'command-line-args-left ".")
+  (batch-update-directory)
+
+  (add-to-list 'command-line-args-left ".")
+  (Custom-make-dependencies)
+
+  (compile-elisp-modules (append lsdb-modules-to-compile
+				 '(auto-autoloads custom-load))
+			 "."))
+
+(defun install-lsdb-package ()
+  (config-lsdb-package)
+  (install-elisp-modules (append lsdb-modules
+				 '(auto-autoloads custom-load))
+			 "./"
+			 (expand-file-name LSDB_PREFIX
+					   (expand-file-name "lisp"
+							     PACKAGEDIR)))
+  (if (file-exists-p "./auto-autoloads.el")
+      (delete-file "./auto-autoloads.el"))
+  (if (file-exists-p "./custom-load.el")
+      (delete-file "./custom-load.el")))
+
+;;; LSDB-MK ends here

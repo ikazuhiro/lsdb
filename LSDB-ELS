@@ -1,0 +1,15 @@
+;;; -*-Emacs-Lisp-*-
+
+;; LSDB-ELS: list of LSDB modules to install
+
+;;; Code:
+
+(setq lsdb-modules-to-compile
+      '(lsdb))
+
+(setq lsdb-modules-not-to-compile nil)
+
+(setq lsdb-modules (append lsdb-modules-to-compile
+			   lsdb-modules-not-to-compile))
+
+;;; LSDB-ELS ends here
