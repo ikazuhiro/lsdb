@@ -107,39 +107,20 @@ where the last three elements are optional."
   :group 'lsdb
   :type 'list)
 
-(lsdb-define-entry 'net
-		   :type '(list string)
-		   :plist 
-		   
 (defcustom lsdb-entry-type-alist
-  '((net (list string))
-    (creation-date string)
-    (last-modified string)
-    (mailing-list (list string))
-    (attribution string)
-    (organization (list string))
-    (www (list string))
-    (aka (list string))
-    (score integer)
-    (x-face (list string)))
-  "Alist mapping entry names to their types."
-  :group 'lsdb
-  :type 'list)
-
-(defcustom lsdb-entry--alist
-  '((net score 5)
-    (creation-date score 2)
-    (last-modified score 3)
-    (mailing-list 4)
-    (attribution 4)
+  '((net 5 ?,)
+    (creation-date 2 ?. t)
+    (last-modified 3 ?. t)
+    (mailing-list 4 ?,)
+    (attribution 4 ?.)
     (organization 4)
     (www 4)
-    (aka 4)
+    (aka 4 ?,)
     (score -1)
     (x-face -1))
-  "Alist of entry scores for presentation.
+  "Alist of entry types for presentation.
 The format of elements of this list should be
-     (ENTRY SCORE TYPE [PROP...])
+     (ENTRY SCORE [CLASS READ-ONLY])
 where the last two elements are optional.
 Possible values for CLASS are `?.' and '?,'.  If CLASS is `?.', the
 entry takes a unique value which is overridden by newly assigned one
@@ -390,21 +371,30 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
        (save-excursion
 	 (goto-char marker)
 	 (if (looking-at "^#s(")
-	     (progn
-	       (forward-char 2)	;skip "#s"
-	       (let ((object (read (current-buffer)))
-		     hash-table data)
-		 (if (eq 'hash-table (car object))
-		     (progn
-		       (setq hash-table
-			     (lsdb-make-hash-table
-			      :size (plist-get (cdr object) 'size)
-			      :test 'equal)
-			     data (plist-get (cdr object) 'data))
-		       (while data
-			 (lsdb-puthash (pop data) (pop data) hash-table))
-		       hash-table)
-		   object)))
+	     (let ((end-marker
+		    (progn
+		      (forward-char 2)	;skip "#s"
+		      (forward-sexp)	;move to the left paren
+		      (point-marker))))
+	       (with-temp-buffer
+		 (buffer-disable-undo)
+		 (insert-buffer-substring (marker-buffer marker)
+					  marker end-marker)
+		 (goto-char (point-min))
+		 (delete-char 2)
+		 (let ((object (read (current-buffer)))
+		       hash-table data)
+		   (if (eq 'hash-table (car object))
+		       (progn
+			 (setq hash-table
+			       (lsdb-make-hash-table
+				:size (plist-get (cdr object) 'size)
+				:test 'equal)
+			       data (plist-get (cdr object) 'data))
+			 (while data
+			   (lsdb-puthash (pop data) (pop data) hash-table))
+			 hash-table)
+		     object))))
 	   (read marker)))))))
 
 (defun lsdb-load-hash-tables ()
