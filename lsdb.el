@@ -64,7 +64,8 @@
 (defcustom lsdb-interesting-header-alist
   '(("Organization" nil organization)
     ("\\(X-\\)?User-Agent\\|X-Mailer" nil user-agent)
-    ("\\(X-\\)?ML-Name" nil mailing-list))
+    ("\\(X-\\)?ML-Name" nil mailing-list)
+    ("X-Attribution\\|X-cite-me" nil attribution))
   "Alist of headers we are interested in.
 The format of elements of this list should be
      (FIELD-NAME REGEXP ENTRY STRING)
@@ -73,12 +74,13 @@ where the last three elements are optional."
   :type 'list)
 
 (defcustom lsdb-entry-type-alist
-  '((net 3 ", ")
+  '((net 3 ?,)
     (creation-date 2)
-    (mailing-list 1 ", "))
+    (mailing-list 1 ?,)
+    (attribution 1 ?.))
   "Alist of entries to display.
 The format of elements of this list should be
-     (ENTRY SCORE DELIMITER)
+     (ENTRY SCORE CLASS)
 where the last element is optional."
   :group 'lsdb
   :type 'list)
@@ -313,18 +315,18 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 (defun lsdb-update-records (entity)
   (lsdb-maybe-load-file)
-  (let (senders recipients interesting alist records bodies)
+  (let (senders recipients interesting alist records bodies entry)
     (with-temp-buffer
       (set-buffer-multibyte nil)
       (buffer-disable-undo)
       (mime-insert-entity entity)
       (std11-narrow-to-header)
       (setq senders
-	    (delq nil (mapcar 'lsdb-extract-address-components
+	    (delq nil (mapcar #'lsdb-extract-address-components
 			      (lsdb-fetch-field-bodies
 			       entity lsdb-sender-headers)))
 	    recipients
-	    (delq nil (mapcar 'lsdb-extract-address-components
+	    (delq nil (mapcar #'lsdb-extract-address-components
 			      (lsdb-fetch-field-bodies
 			       entity lsdb-recipients-headers))))
       (setq alist lsdb-interesting-header-alist)
@@ -337,11 +339,14 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 		     (replace-match (nth 3 (car alist)) nil nil field-body)
 		   field-body))
 	       (lsdb-fetch-field-bodies entity (car (car alist)))))
-	(if bodies
-	    (push (cons (or (nth 2 (car alist))
-			    'notes)
-			bodies)
-		  interesting))
+	(when bodies
+	  (setq entry (or (nth 2 (car alist))
+			  'notes))
+	  (push (cons entry
+		      (if (eq ?. (nth 2 (assq entry lsdb-entry-type-alist)))
+			  (car bodies)
+			bodies))
+		interesting))
 	(setq alist (cdr alist))))
     (if senders
 	(setq records (list (lsdb-update-record (pop senders) interesting))))
@@ -407,9 +412,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (insert "\t" (capitalize (symbol-name (car (car entries)))) ": "
 	      (if (listp (cdr (car entries)))
 		  (mapconcat #'identity (cdr (car entries))
-			     (or (nth 2 (assq (car (car entries))
-					      lsdb-entry-type-alist))
-				 "\n\t\t"))
+			     (if (eq ?, (nth 2 (assq (car (car entries))
+						     lsdb-entry-type-alist)))
+				 ", "
+			       "\n\t\t"))
 		(cdr (car entries)))
 	      "\n")
       (setq entries (cdr entries)))))
