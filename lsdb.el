@@ -156,6 +156,13 @@ The updated record is passed to each function as the argument."
   :group 'lsdb
   :type 'hook)
 
+(defcustom lsdb-delete-record-functions
+  '(lsdb-delete-address-cache)
+  "List of functions called after a record is removed.
+The removed record is passed to each function as the argument."
+  :group 'lsdb
+  :type 'hook)
+
 (defcustom lsdb-secondary-hash-tables
   '(lsdb-address-cache)
   "List of the hash tables for reverse lookup"
@@ -545,6 +552,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (while net
       (lsdb-puthash (pop net) (car record) lsdb-address-cache))))
 
+(defun lsdb-delete-address-cache (record)
+  (let ((net (cdr (assq 'net record))))
+    (while net
+      (lsdb-remhash (pop net) lsdb-address-cache))))
+
 ;;;_  , #2 Iterate on the All Records (very slow)
 (defun lsdb-lookup-full-name-by-fuzzy-matching (sender)
   (let ((names
@@ -720,20 +732,29 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (lsdb-display-records (list record))))
 
 (defun lsdb-display-records (records)
-  (with-output-to-temp-buffer lsdb-buffer-name
-    (set-buffer standard-output)
-    (setq records
-	  (sort (copy-sequence records)
-		(or lsdb-display-records-sort-predicate
-		    (lambda (record1 record2)
-		      (string-lessp (car record1) (car record2))))))
-    (while records
-      (save-restriction
-	(narrow-to-region (point) (point))
-	(lsdb-print-record (car records)))
-      (goto-char (point-max))
-      (setq records (cdr records)))
-    (lsdb-mode)))
+  (with-current-buffer (get-buffer-create lsdb-buffer-name)
+    (let ((standard-output (current-buffer))
+	  (inhibit-read-only t)
+	  buffer-read-only)
+      (buffer-disable-undo)
+      (erase-buffer)
+      (setq records
+	    (sort (copy-sequence records)
+		  (or lsdb-display-records-sort-predicate
+		      (lambda (record1 record2)
+			(string-lessp (car record1) (car record2))))))
+      (while records
+	(save-restriction
+	  (narrow-to-region (point) (point))
+	  (lsdb-print-record (car records)))
+	(goto-char (point-max))
+	(setq records (cdr records))))
+    (lsdb-mode)
+    (set-buffer-modified-p lsdb-hash-tables-are-dirty)
+    (goto-char (point-min))
+    (if temp-buffer-show-function
+	(funcall temp-buffer-show-function (current-buffer))
+      (pop-to-buffer (current-buffer)))))
 
 (defsubst lsdb-entry-score (entry)
   (or (nth 1 (assq (car entry) lsdb-entry-type-alist)) 0))
@@ -928,7 +949,9 @@ Modify whole identification by side effect."
   (let ((keymap (make-sparse-keymap)))
     (define-key keymap "a" 'lsdb-mode-add-entry)
     (define-key keymap "d" 'lsdb-mode-delete-entry)
+    (define-key keymap "D" 'lsdb-mode-delete-record)
     (define-key keymap "e" 'lsdb-mode-edit-entry)
+    (define-key keymap "E" 'lsdb-mode-edit-record)
     (define-key keymap "l" 'lsdb-mode-load)
     (define-key keymap "s" 'lsdb-mode-save)
     (define-key keymap "q" 'lsdb-mode-quit-window)
@@ -986,6 +1009,12 @@ Modify whole identification by side effect."
 (defun lsdb-current-record ()
   "Return the current record name."
   (get-text-property (point) 'lsdb-record))
+
+(defun lsdb-delete-record (record)
+  "Delete given RECORD."
+  (lsdb-remhash (car record) lsdb-hash-table)
+  (run-hook-with-args 'lsdb-delete-record-functions record)
+  (setq lsdb-hash-tables-are-dirty t))
 
 (defun lsdb-current-entry ()
   "Return the current entry name in canonical form."
@@ -1078,62 +1107,123 @@ Modify whole identification by side effect."
 			 (lsdb-read-entry record "Which entry to delete: "))
 	  entry (assq entry-name (cdr record)))
     (when (and entry
-	       (or (not (interactive-p))
-		   (not lsdb-verbose)
+	       (or (not lsdb-verbose)
 		   (y-or-n-p
 		    (format "Do you really want to delete entry `%s' of `%s'?"
 			    entry-name (car record)))))
       (lsdb-delete-entry record entry)
       (lsdb-mode-delete-entry-1 entry))))
 
+(defun lsdb-mode-delete-record ()
+  "Delete the record on the current line."
+  (interactive)
+  (let ((record (lsdb-current-record)))
+    (unless record
+      (error "%s" "There is nothing to follow here"))
+    (when (or (not lsdb-verbose)
+	      (yes-or-no-p
+	       (format "Do you really want to delete entire record of %s? "
+		       (car record))))
+      (lsdb-delete-record record)
+      (save-restriction
+	(lsdb-narrow-to-record)
+	(let ((inhibit-read-only t)
+	      buffer-read-only)
+	  (delete-region (point-min) (point-max)))))))
+
+(defun lsdb-mode-delete-entry-or-record ()
+  "Delete the entry on the current line.
+If the cursor is on the first line of a database entry (the name line)
+then the entire entry will be deleted."
+  (interactive)
+  (if (lsdb-current-entry)
+      (lsdb-mode-delete-entry)
+    (lsdb-mode-delete-record)))
+
 (defun lsdb-mode-edit-entry ()
   "Edit the entry on the current line."
   (interactive)
-  (let ((record (lsdb-current-record))
-	entry-name entry marker)
+  (let ((record (lsdb-current-record)))
     (unless record
       (error "There is nothing to follow here"))
-    (setq entry-name (or (lsdb-current-entry)
-			 (lsdb-read-entry record "Which entry to edit: "))
-	  entry (assq entry-name (cdr record))
-	  marker (point-marker))
-    (lsdb-edit-form
-     (cdr entry) "Editing the entry."
-     `(lambda (form)
-	(unless (equal form ',(cdr entry))
-	  (save-excursion
-	    (set-buffer lsdb-buffer-name)
-	    (goto-char ,marker)
-	    (let ((record (lsdb-current-record))
-		  entry
-		  (inhibit-read-only t)
-		  buffer-read-only)
-	      (unless record
-		(error "The entry currently in editing is discarded"))
-	      (setq entry (assq ',entry-name (cdr record)))
+    (let ((entry-name (or (lsdb-current-entry)
+			  (lsdb-read-entry record "Which entry to edit: "))))
+      (lsdb-edit-form
+       (cdr (assq entry-name (cdr record))) "Editing the entry."
+       `(lambda (form)
+	  (let* ((record ',record)
+		 (entry-name ',entry-name)
+		 (entry (assq entry-name (cdr record))))
+	    (unless (equal form (cdr entry))
 	      (setcdr entry form)
 	      (run-hook-with-args 'lsdb-update-record-functions record)
 	      (setq lsdb-hash-tables-are-dirty t)
-	      (lsdb-mode-delete-entry-1 entry)
-	      (beginning-of-line)
-	      (add-text-properties
-	       (point)
-	       (progn
-		 (lsdb-insert-entry (cons ',entry-name form))
-		 (point))
-	       (list 'lsdb-record record)))))))))
+	      (with-current-buffer lsdb-buffer-name
+		(let ((inhibit-read-only t)
+		      buffer-read-only
+		      (pos (text-property-any (point-min) (point-max)
+					      'lsdb-record record)))
+		  (unless pos
+		    (error "%s" "The entry currently in editing is discarded"))
+		  (lsdb-mode-delete-entry-1 entry)
+		  (forward-line 0)
+		  (add-text-properties
+		   (point)
+		   (progn
+		     (lsdb-insert-entry (cons entry-name form))
+		     (point))
+		   (list 'lsdb-record record)))))))))))
+
+(defun lsdb-mode-edit-record ()
+  "Edit the name of the record on the current line."
+  (interactive)
+  (let ((record (lsdb-current-record)))
+    (unless record
+      (error "There is nothing to follow here"))
+    (lsdb-edit-form
+     (car record) "Editing the name."
+     `(lambda (new-name)
+	(unless (stringp new-name)
+	  (error "String is required: `%s'" new-name))
+	(let* ((record ',record)
+	       (old-name (car record)))
+	  (unless (equal new-name old-name)
+	    (lsdb-delete-record record)
+	    (setcar record new-name)
+	    (lsdb-puthash new-name (cdr record) lsdb-hash-table)
+	    (run-hook-with-args 'lsdb-update-record-functions record)
+	    (setq lsdb-hash-tables-are-dirty t)
+	    (with-current-buffer lsdb-buffer-name
+	      (let ((inhibit-read-only t)
+		    buffer-read-only
+		    (pos (text-property-any (point-min) (point-max)
+					    'lsdb-record record)))
+		(unless pos
+		  (error "%s" "The entry currently in editing is discarded"))
+		(delete-region (point) (+ (point) (length old-name)))
+		(add-text-properties (point)
+				     (progn (insert form) (point))
+				     (list 'lsdb-record record))))))))))
+
+(defun lsdb-mode-edit-entry-or-record ()
+  "Edit the entry on the current line.
+If the cursor is on the first line of a database entry (the name line)
+then the name of this record will be edited."
+  (interactive)
+  (if (lsdb-current-entry)
+      (lsdb-mode-edit-entry)
+    (lsdb-mode-edit-record)))
 
 (defun lsdb-mode-save (&optional dont-ask)
   "Save LSDB hash table into `lsdb-file'."
-  (interactive)
+  (interactive (list t))
   (if (not lsdb-hash-tables-are-dirty)
       (message "(No changes need to be saved)")
-    (when (or (interactive-p)
-	      dont-ask
+    (when (or dont-ask
 	      (not lsdb-verbose)
 	      (y-or-n-p "Save the LSDB now? "))
       (lsdb-save-hash-tables)
-      (setq lsdb-hash-tables-are-dirty nil)
+      (set-buffer-modified-p (setq lsdb-hash-tables-are-dirty nil))
       (message "The LSDB was saved successfully."))))
 
 (defun lsdb-mode-load ()
