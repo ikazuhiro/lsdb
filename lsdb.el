@@ -148,6 +148,9 @@ where the last element is optional."
 (defvar lsdb-buffer-name "*LSDB*"
   "Buffer name to display LSDB record.")
 
+(defvar lsdb-hash-table-is-dirty nil
+  "Flag to indicate whether the hash table needs to be saved.")
+
 ;;;_. Hash Table Emulation
 (if (fboundp 'make-hash-table)
     (progn
@@ -304,13 +307,16 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (let ((old (lsdb-gethash (nth 1 sender) lsdb-hash-table))
 	(new (cons (cons 'net (list (car sender)))
 		   interesting))
+	merged
 	record)
     (unless old
       (setq new (cons (cons 'creation-date (format-time-string "%Y-%m-%d"))
 		      new)))
-    (setq record (cons (nth 1 sender)
-		       (lsdb-merge-record-entries old new)))
-    (lsdb-puthash (car record) (cdr record) lsdb-hash-table)
+    (setq merged (lsdb-merge-record-entries old new)
+	  record (cons (nth 1 sender) merged))
+    (unless (equal merged old)
+      (lsdb-puthash (car record) (cdr record) lsdb-hash-table)
+      (setq lsdb-hash-table-is-dirty t))
     record))
 
 (defun lsdb-update-records (entity)
@@ -492,7 +498,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (lsdb-display-record (car records)))))
 
 (defun lsdb-gnus-offer-save ()
-  (if (y-or-n-p "Save the LSDB now?")
+  (if (and lsdb-hash-table-is-dirty
+	   (y-or-n-p "Save the LSDB now?"))
       (lsdb-save-file lsdb-file lsdb-hash-table)))
 
 (provide 'lsdb)
