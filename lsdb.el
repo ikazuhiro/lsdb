@@ -563,6 +563,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (define-key keymap " " 'scroll-up)
     (define-key keymap [delete] 'scroll-down)
     (define-key keymap "\177" 'scroll-down)
+    (define-key keymap [backspace] 'scroll-down)
     keymap)
   "LSDB's keymap.")
 
@@ -734,6 +735,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
        nil nil nil 'lsdb-mode-lookup-history)
       entry-name)))
   (let (records)
+    (lsdb-maybe-load-file)
     (lsdb-maphash
      (if entry-name
 	 (lambda (key value)
