@@ -184,9 +184,14 @@ If non-nil, supersedes the return value of `lsdb-x-face-available-image-type'."
   :group 'lsdb
   :type 'symbol)
 
+(defcustom lsdb-x-face-scale-factor 0.5
+  "A number used to scale down or scale up X-Face images."
+  :group 'lsdb
+  :type 'number)
+  
 (defcustom lsdb-x-face-command-alist
-  '((pbm "{ echo '/* Width=48, Height=48 */'; uncompface; } | icontopbm | pnmscale 0.5")
-    (xpm "{ echo '/* Width=48, Height=48 */'; uncompface; } | icontopbm | pnmscale 0.5 | ppmtoxpm"))
+  '((pbm "{ echo '/* Width=48, Height=48 */'; uncompface; } | icontopbm | pnmscale " scale-factor)
+    (xpm "{ echo '/* Width=48, Height=48 */'; uncompface; } | icontopbm | pnmscale " scale-factor " | ppmtoxpm"))
   "An alist from an image type to a command to be executed to display an X-Face header.
 The command will be executed in a sub-shell asynchronously.
 The compressed face will be piped to this command."
@@ -211,9 +216,14 @@ If non-nil, supersedes the return value of `lsdb-x-face-available-image-type'."
   :group 'lsdb
   :type 'symbol)
 
+(defcustom lsdb-face-scale-factor 0.5
+  "A number used to scale down or scale up Face images."
+  :group 'lsdb
+  :type 'number)
+
 (defcustom lsdb-face-command-alist
-  '((png "pngtopnm | pnmscale 0.5 | pnmtopng")
-    (xpm "pngtopnm | pnmscale 0.5 | ppmtoxpm"))
+  '((png "pngtopnm | pnmscale " scale-factor " | pnmtopng")
+    (xpm "pngtopnm | pnmscale " scale-factor " | ppmtoxpm"))
   "An alist from an image type to a command to be executed to display a Face header.
 The command will be executed in a sub-shell asynchronously.
 The decoded field-body (actually a PNG data) will be piped to this command."
@@ -349,6 +359,16 @@ It represents address to full-name mapping.")
   "Non-nil means call as function to display a help buffer.
 The function is called with one argument, the buffer to be displayed.
 Overrides `temp-buffer-show-function'.")
+
+;;;_. Utility functions
+(defun lsdb-substitute-variables (program variable value)
+  (setq program (copy-sequence program))
+  (let ((pointer program))
+    (while pointer
+      (setq pointer (memq variable program))
+      (if pointer
+	  (setcar pointer value)))
+    program))
 
 ;;;_. Hash Table Emulation
 (if (and (fboundp 'make-hash-table)
@@ -1795,7 +1815,11 @@ the user wants it."
 	    (start-process-shell-command
 	     "lsdb-x-face-command" (generate-new-buffer " *lsdb work*")
 	     (concat "{ "
-		     (nth 1 (assq type lsdb-x-face-command-alist))
+		     (apply #'concat
+			    (lsdb-substitute-variables
+			     (cdr (assq type lsdb-x-face-command-alist))
+			     'scale-factor
+			     (number-to-string lsdb-x-face-scale-factor)))
 		     "; } 2> /dev/null")))
       (process-send-string process (concat x-face "\n"))
       (process-send-eof process)
@@ -1889,7 +1913,11 @@ the user wants it."
 	    (start-process-shell-command
 	     "lsdb-face-command" (generate-new-buffer " *lsdb work*")
 	     (concat "{ "
-		     (nth 1 (assq type lsdb-face-command-alist))
+		     (apply #'concat
+			    (lsdb-substitute-variables
+			     (cdr (assq type lsdb-face-command-alist))
+			     'scale-factor
+			     (number-to-string lsdb-face-scale-factor)))
 		     "; } 2> /dev/null")))
       (process-send-string process (base64-decode-string face))
       (process-send-eof process)
