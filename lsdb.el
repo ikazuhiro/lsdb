@@ -167,6 +167,12 @@ The updated record is passed to each function as the argument."
   :group 'lsdb
   :type 'integer)
 
+(defcustom lsdb-x-face-image-type nil
+  "A image type of displayed x-face.
+If non-nil, supersedes the return value of `lsdb-x-face-available-image-type'."
+  :group 'lsdb
+  :type 'symbol)
+
 (defcustom lsdb-x-face-command-alist
   '((pbm "{ echo '/* Width=48, Height=48 */'; uncompface; } | icontopbm | pnmscale 0.5")
     (xpm "{ echo '/* Width=48, Height=48 */'; uncompface; } | icontopbm | pnmscale 0.5 | ppmtoxpm"))
@@ -1098,7 +1104,7 @@ It partially emulates the GNU Emacs' of `quit-window'."
       (delete-window window))
     (if kill
 	(kill-buffer buffer)
-      (bury-buffer buffer))))
+      (bury-buffer (unless (eq buffer (current-buffer)) buffer)))))
 
 (defun lsdb-hide-buffer ()
   "Hide the LSDB window."
@@ -1366,7 +1372,9 @@ always hide."
   (autoload 'mew-current-get-fld "mew")
   (autoload 'mew-current-get-msg "mew")
   (autoload 'mew-frame-id "mew")
-  (autoload 'mew-cache-hit "mew"))
+  (autoload 'mew-cache-hit "mew")
+  (autoload 'mew-xinfo-get-decode-err "mew")
+  (autoload 'mew-xinfo-get-action "mew"))
 
 ;;;###autoload
 (defun lsdb-mew-insinuate ()
@@ -1378,22 +1386,33 @@ always hide."
 		(lsdb-hide-buffer))))
   (add-hook 'mew-suspend-hook 'lsdb-hide-buffer)
   (add-hook 'mew-quit-hook 'lsdb-mode-save)
-  (add-hook 'kill-emacs-hook 'lsdb-mode-save))
+  (add-hook 'kill-emacs-hook 'lsdb-mode-save)
+  (cond
+   ;; Mew 3
+   ((fboundp 'mew-summary-visit-folder)
+    (defadvice mew-summary-visit-folder (before lsdb-hide-buffer activate)
+      (lsdb-hide-buffer)))
+   ;; Mew 2
+   ((fboundp 'mew-summary-switch-to-folder)
+    (defadvice mew-summary-switch-to-folder (before lsdb-hide-buffer activate)
+      (lsdb-hide-buffer)))))
 
 (defun lsdb-mew-update-record ()
   (let* ((fld (mew-current-get-fld (mew-frame-id)))
 	 (msg (mew-current-get-msg (mew-frame-id)))
-	 (cache (mew-cache-hit fld msg 'must-hit))
+	 (cache (mew-cache-hit fld msg))
 	 records)
-    (save-excursion
-      (set-buffer cache)
-      (make-local-variable 'lsdb-decode-field-body-function)
-      (setq lsdb-decode-field-body-function
-	    (lambda (body name)
-	      (set-text-properties 0 (length body) nil body)
-	      body))
-      (when (setq records (lsdb-update-records))
-	(lsdb-display-record (car records))))))
+    (when cache
+      (save-excursion
+	(set-buffer cache)
+	(unless (or (mew-xinfo-get-decode-err) (mew-xinfo-get-action))
+	  (make-local-variable 'lsdb-decode-field-body-function)
+	  (setq lsdb-decode-field-body-function
+		(lambda (body name)
+		  (set-text-properties 0 (length body) nil body)
+		  body))
+	  (when (setq records (lsdb-update-records))
+	    (lsdb-display-record (car records))))))))
 
 ;;;_. Interface to MU-CITE
 (eval-when-compile
@@ -1544,7 +1563,8 @@ the user wants it."
 			   'lsdb-record record)))))
 
 (defun lsdb-insert-x-face-asynchronously (x-face)
-  (let* ((type (lsdb-x-face-available-image-type))
+  (let* ((type (or lsdb-x-face-image-type
+		   (lsdb-x-face-available-image-type)))
 	 (shell-file-name lsdb-shell-file-name)
 	 (shell-command-switch lsdb-shell-command-switch)
 	 (process-connection-type nil)
