@@ -1532,8 +1532,10 @@ of the buffer."
   (add-hook 'gnus-article-prepare-hook 'lsdb-gnus-update-record)
   (add-hook 'gnus-save-newsrc-hook 'lsdb-mode-save))
 
-(defvar gnus-article-current-summary)
-(defvar gnus-original-article-buffer)
+(eval-when-compile
+  (defvar gnus-article-current-summary)
+  (defvar gnus-original-article-buffer))
+
 (defun lsdb-gnus-update-record ()
   (with-current-buffer (with-current-buffer gnus-article-current-summary
 			 gnus-original-article-buffer)
