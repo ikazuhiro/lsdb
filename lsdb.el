@@ -371,30 +371,21 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
        (save-excursion
 	 (goto-char marker)
 	 (if (looking-at "^#s(")
-	     (let ((end-marker
-		    (progn
-		      (forward-char 2)	;skip "#s"
-		      (forward-sexp)	;move to the left paren
-		      (point-marker))))
-	       (with-temp-buffer
-		 (buffer-disable-undo)
-		 (insert-buffer-substring (marker-buffer marker)
-					  marker end-marker)
-		 (goto-char (point-min))
-		 (delete-char 2)
-		 (let ((object (read (current-buffer)))
-		       hash-table data)
-		   (if (eq 'hash-table (car object))
-		       (progn
-			 (setq hash-table
-			       (lsdb-make-hash-table
-				:size (plist-get (cdr object) 'size)
-				:test 'equal)
-			       data (plist-get (cdr object) 'data))
-			 (while data
-			   (lsdb-puthash (pop data) (pop data) hash-table))
-			 hash-table)
-		     object))))
+	     (progn
+	       (forward-char 2)	;skip "#s"
+	       (let ((object (read (current-buffer)))
+		     hash-table data)
+		 (if (eq 'hash-table (car object))
+		     (progn
+		       (setq hash-table
+			     (lsdb-make-hash-table
+			      :size (plist-get (cdr object) 'size)
+			      :test 'equal)
+			     data (plist-get (cdr object) 'data))
+		       (while data
+			 (lsdb-puthash (pop data) (pop data) hash-table))
+		       hash-table)
+		   object)))
 	   (read marker)))))))
 
 (defun lsdb-load-hash-tables ()
