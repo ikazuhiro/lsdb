@@ -33,6 +33,10 @@ package:
 install-package:	package
 	$(XEMACS) $(FLAGS) -f install-lsdb-package $(PACKAGEDIR)
 
+ChangeLog: *.el README Makefile
+	cvs2cl --prune --no-wrap --usermap ./cvs2cl/usermap --gmt --stdout | \
+	ruby -p -i ./cvs2cl/fmtlog.rb > ChangeLog
 
+.PHONY: clean
 clean:
 	-$(RM) $(GOMI)
