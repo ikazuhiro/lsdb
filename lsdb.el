@@ -487,10 +487,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (set-buffer-multibyte multibyte))))
 
 ;;;_. Record Management
-(defun lsdb-maybe-load-secondary-hash-tables ()
+(defun lsdb-rebuild-secondary-hash-tables (&optional force)
   (let ((tables lsdb-secondary-hash-tables))
     (while tables
-      (unless (symbol-value (car tables))
+      (when (or force (not (symbol-value (car tables))))
 	(set (car tables) (lsdb-make-hash-table :test 'equal))
 	(lsdb-maphash
 	 (lambda (key value)
@@ -506,7 +506,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (if (file-exists-p lsdb-file)
 	(lsdb-load-hash-tables)
       (setq lsdb-hash-table (lsdb-make-hash-table :test 'equal)))
-    (lsdb-maybe-load-secondary-hash-tables)))
+    (lsdb-rebuild-secondary-hash-tables)))
 
 ;;;_ : Fallback Lookup Functions
 ;;;_  , #1 Address Cache
@@ -883,6 +883,7 @@ Modify whole identification by side effect."
     (define-key keymap "a" 'lsdb-mode-add-entry)
     (define-key keymap "d" 'lsdb-mode-delete-entry)
     (define-key keymap "e" 'lsdb-mode-edit-entry)
+    (define-key keymap "l" 'lsdb-mode-load)
     (define-key keymap "s" 'lsdb-mode-save)
     (define-key keymap "q" 'lsdb-mode-quit-window)
     (define-key keymap "g" 'lsdb-mode-lookup)
@@ -1068,6 +1069,15 @@ the current record."
       (lsdb-save-hash-tables)
       (setq lsdb-hash-tables-are-dirty nil)
       (message "The LSDB was saved successfully."))))
+
+(defun lsdb-mode-load ()
+  "Load LSDB hash table from `lsdb-file'."
+  (interactive)
+  (let (lsdb-secondary-hash-tables)
+    (lsdb-load-hash-tables))
+  (message "Rebuilding secondary hash tables...")
+  (lsdb-rebuild-secondary-hash-tables t)
+  (message "Rebuilding secondary hash tables...done"))
 
 (defun lsdb-mode-quit-window (&optional kill window)
   "Quit the current buffer.
