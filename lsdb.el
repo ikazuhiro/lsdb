@@ -829,13 +829,13 @@ Modify whole identification by side effect."
 		 (point))
 	       (list 'lsdb-record record)))))))))
 
-(defun lsdb-mode-save (&optional ask)
+(defun lsdb-mode-save (&optional dont-ask)
   "Save LSDB hash table into `lsdb-file'."
   (interactive)
   (if (not lsdb-hash-table-is-dirty)
       (message "(No changes need to be saved)")
     (when (or (interactive-p)
-	      (not ask)
+	      dont-ask
 	      (y-or-n-p "Save the LSDB now?"))
       (lsdb-save-file lsdb-file lsdb-hash-table)
       (setq lsdb-hash-table-is-dirty nil)
