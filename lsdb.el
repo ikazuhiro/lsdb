@@ -204,6 +204,14 @@ The compressed face will be piped to this command."
   :group 'lsdb
   :type 'function)
 
+(defcustom lsdb-display-records-belong-to-user t
+  "Non-nil means LSDB displays records belong to yourself.
+When this option is equal to nil and a message is sent by the user
+whose address is `user-mail-address', the LSDB record for the To: line
+will be shown instead of the one for the From: line."
+  :group 'lsdb
+  :type 'boolean)
+
 (defcustom lsdb-pop-up-windows t
   "Non-nil means LSDB should make new windows to display records."
   :group 'lsdb
@@ -691,6 +699,20 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 			  (split-window-vertically)))))
 	(set-window-buffer window buffer)
 	(lsdb-fit-window-to-buffer window)))))
+
+(defun lsdb-update-records-and-display ()
+  (let ((records (lsdb-update-records)))
+    (if lsdb-display-records-belong-to-user
+	(if records
+	    (lsdb-display-record (car records))
+	  (lsdb-hide-buffer))
+      (catch 'lsdb-show-record
+	(while records
+	  (if (member user-mail-address (cdr (assq 'net (car records))))
+	      (setq records (cdr records))
+	    (lsdb-display-record (car records))
+	    (throw 'lsdb-show-record t)))
+	(lsdb-hide-buffer)))))
 
 (defun lsdb-display-record (record)
   "Display only one RECORD, then shrink the window as possible."
@@ -1325,17 +1347,12 @@ of the buffer."
   (add-hook 'gnus-article-prepare-hook 'lsdb-gnus-update-record)
   (add-hook 'gnus-save-newsrc-hook 'lsdb-mode-save))
 
-(defvar gnus-current-headers)
+(defvar gnus-article-current-summary)
+(defvar gnus-original-article-buffer)
 (defun lsdb-gnus-update-record ()
-  (let ((entity gnus-current-headers)
-	records)
-    (with-temp-buffer
-      (set-buffer-multibyte nil)
-      (buffer-disable-undo)
-      (mime-insert-entity entity)
-      (setq records (lsdb-update-records))
-      (when records
-	(lsdb-display-record (car records))))))
+  (with-current-buffer (with-current-buffer gnus-article-current-summary
+			 gnus-original-article-buffer)
+    (lsdb-update-records-and-display)))
 
 ;;;_. Interface to Wanderlust
 ;;;###autoload
@@ -1356,11 +1373,9 @@ of the buffer."
 (defun lsdb-wl-update-record ()
   (save-excursion
     (set-buffer (wl-message-get-original-buffer))
-    (let ((records (lsdb-update-records)))
-      (when records
-	(let ((lsdb-temp-buffer-show-function
-	       #'lsdb-wl-temp-buffer-show-function))
-	  (lsdb-display-record (car records)))))))
+    (let ((lsdb-temp-buffer-show-function
+	   #'lsdb-wl-temp-buffer-show-function))
+      (lsdb-update-records-and-display))))
 
 (defun lsdb-wl-toggle-buffer (&optional arg)
   "Toggle hiding of the LSDB window for Wanderlust.
@@ -1442,8 +1457,7 @@ always hide."
 (defun lsdb-mew-update-record ()
   (let* ((fld (mew-current-get-fld (mew-frame-id)))
 	 (msg (mew-current-get-msg (mew-frame-id)))
-	 (cache (mew-cache-hit fld msg))
-	 records)
+	 (cache (mew-cache-hit fld msg)))
     (when cache
       (save-excursion
 	(set-buffer cache)
@@ -1453,8 +1467,7 @@ always hide."
 		(lambda (body name)
 		  (set-text-properties 0 (length body) nil body)
 		  body))
-	  (when (setq records (lsdb-update-records))
-	    (lsdb-display-record (car records))))))))
+	  (lsdb-update-records-and-display))))))
 
 ;;;_. Interface to MU-CITE
 (eval-when-compile
