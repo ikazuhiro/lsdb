@@ -560,6 +560,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (define-key keymap "g" 'lsdb-mode-lookup)
     (define-key keymap "p" 'lsdb-mode-previous-record)
     (define-key keymap "n" 'lsdb-mode-next-record)
+    (define-key keymap " " 'scroll-up)
+    (define-key keymap [delete] 'scroll-down)
+    (define-key keymap "\177" 'scroll-down)
     keymap)
   "LSDB's keymap.")
 
