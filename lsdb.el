@@ -640,10 +640,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   old)
 
 ;;;_. Display Management
-(defun lsdb-fit-window-to-buffer (window buffer)
+(defun lsdb-fit-window-to-buffer (&optional window)
   (save-selected-window
-    (set-window-buffer window buffer)
-    (select-window window)
+    (if window
+	(select-window window))
     (unless (pos-visible-in-window-p (point-max))
       (enlarge-window (- lsdb-window-max-height (window-height))))
     (shrink-window-if-larger-than-buffer)
@@ -653,12 +653,13 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (set-window-start window (point-min)))))
 
 (defun lsdb-temp-buffer-show-function (buffer)
-  (lsdb-fit-window-to-buffer 
-   (or (get-buffer-window lsdb-buffer-name)
-       (progn
-	 (select-window (get-largest-window))
-	 (split-window-vertically)))
-   buffer))
+  (save-selected-window
+    (let ((window (or (get-buffer-window lsdb-buffer-name)
+		      (progn
+			(select-window (get-largest-window))
+			(split-window-vertically)))))
+      (set-window-buffer window buffer)
+      (lsdb-fit-window-to-buffer window))))
 
 (defun lsdb-display-record (record)
   "Display only one RECORD, then shrink the window as possible."
@@ -1279,17 +1280,18 @@ of the buffer."
 (defvar wl-current-summary-buffer)
 (defvar wl-message-buffer)
 (defun lsdb-wl-temp-buffer-show-function (buffer)
-  (lsdb-fit-window-to-buffer
-   (or (get-buffer-window lsdb-buffer-name)
-       (progn
-	 (select-window 
-	  (or (save-excursion
-		(if (buffer-live-p wl-current-summary-buffer)
-		    (set-buffer wl-current-summary-buffer))
-		(get-buffer-window wl-message-buffer))
-	      (get-largest-window)))
-	 (split-window-vertically)))
-   buffer))
+  (save-selected-window
+    (let ((window (or (get-buffer-window lsdb-buffer-name)
+		      (progn
+			(select-window 
+			 (or (save-excursion
+			       (if (buffer-live-p wl-current-summary-buffer)
+				   (set-buffer wl-current-summary-buffer))
+			       (get-buffer-window wl-message-buffer))
+			     (get-largest-window)))
+			(split-window-vertically)))))
+      (set-window-buffer window buffer)
+      (lsdb-fit-window-to-buffer window))))
 
 ;;;_. Interface to Mew written by Hideyuki SHIRAI <shirai@rdmg.mgcs.mei.co.jp>
 (eval-when-compile
