@@ -229,6 +229,11 @@ Bourne shell or its equivalent \(not tcsh) is needed for \"2>\"."
   :group 'lsdb
   :type 'string)
 
+(defcustom lsdb-verbose t
+  "If non-nil, confirm user to submit changes to lsdb-hash-table."
+  :type 'boolean
+  :group 'lsdb)
+
 ;;;_. Faces
 (defface lsdb-header-face
   '((t (:underline t)))
@@ -974,6 +979,14 @@ Modify whole identification by side effect."
     (unless (equal entry-name "")
       (intern (downcase entry-name)))))
 
+(defun lsdb-delete-entry (record entry)
+  "Delete given ENTRY from RECORD."
+  (setcdr record (delq entry (cdr record)))
+  (lsdb-puthash (car record) (cdr record)
+		lsdb-hash-table)
+  (run-hook-with-args 'lsdb-update-record-functions record)
+  (setq lsdb-hash-tables-are-dirty t))
+
 (defun lsdb-mode-add-entry (entry-name)
   "Add an entry on the current line."
   (interactive
@@ -1019,31 +1032,30 @@ Modify whole identification by side effect."
       (setq entry-name (or (lsdb-current-entry)
 			   (lsdb-read-entry
 			    record "Which entry to delete: "))))
-    (setq entry (assq entry-name (cdr record)))
-    (when (and entry
-	       (not dont-update))
-      (setcdr record (delq entry (cdr record)))
-      (lsdb-puthash (car record) (cdr record)
-		    lsdb-hash-table)
-      (run-hook-with-args 'lsdb-update-record-functions record)
-      (setq lsdb-hash-tables-are-dirty t))
-    (save-restriction
-      (lsdb-narrow-to-record)
-      (let ((case-fold-search t)
-	    (inhibit-read-only t)
-	    buffer-read-only)
-	(goto-char (point-min))
-	(if (re-search-forward
-	     (concat "^\t" (capitalize (symbol-name
-					(or entry-name
-					    (lsdb-current-entry))))
-		     ":")
-	     nil t)
-	    (delete-region (match-beginning 0)
-			   (if (re-search-forward
-				"^\t[^\t][^:]+:" nil t)
-			       (match-beginning 0)
-			     (point-max))))))))
+    (when (and (setq entry (assq entry-name (cdr record)))
+	       (or (not lsdb-verbose)
+		   (y-or-n-p
+		    (format "Do you really want to delete entry `%s' of `%s'?"
+			    entry-name (car record)))))
+      (unless dont-update
+	(lsdb-delete-entry record entry))
+      (save-restriction
+	(lsdb-narrow-to-record)
+	(let ((case-fold-search t)
+	      (inhibit-read-only t)
+	      buffer-read-only)
+	  (goto-char (point-min))
+	  (if (re-search-forward
+	       (concat "^\t" (capitalize (symbol-name
+					  (or entry-name
+					      (lsdb-current-entry))))
+		       ":")
+	       nil t)
+	      (delete-region (match-beginning 0)
+			     (if (re-search-forward
+				  "^\t[^\t][^:]+:" nil t)
+				 (match-beginning 0)
+			       (point-max)))))))))
 
 (defun lsdb-mode-edit-entry ()
   "Edit the entry on the current line."
