@@ -2,7 +2,7 @@
 .* What's LSDB
 
 LSDB (The Lovely Sister Database) is a rolodex-like database program
-for SEMI based MUA.  It's intended to be a lightweight relacement for
+for SEMI based MUA.  It intends to be a lightweight replacement for
 BBDB (The Insidious Big Brother Database).  Unfortunately, it
 currently doesn't support the all features of BBDB.
 
