@@ -57,6 +57,11 @@ If you use Wanderlust, put the following lines into your ~/.wl:
           (lambda ()
              (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
 
+If you use MU-CITE, put the following lines into your ~/.emacs:
+(autoload 'lsdb-mu-insinuate "lsdb")
+(eval-after-load "mu-cite"
+  '(lsdb-mu-insinuate))
+
 .* Bug reports
 If you found bugs, please drop a note to the EMACS-MIME Mailing List:
 
@@ -83,11 +88,10 @@ time, use lsdb-display-records<f> instead.
 .. Internal Data Model
 . : lsdb-hash-table
 lsdb-hash-table is the variable which holds all the records in LSDB.
-We can operate on this variable in similar fashion to CL's hash-table.
-
-lsdb-puthash for puthash, lsdb-gethash to gethash, lsdh-maphash to
-maphash are allowed to use.  For example, you can write the following
-expression to get the record for "Daiki Ueno":
+You can operate on this variable in similar fashion to CL's
+hash-table: lsdb-puthash for puthash, lsdb-gethash to gethash,
+lsdh-maphash to maphash are available to you.  For example, you can
+write the following expression to get the record for "Daiki Ueno":
 
 (lsdb-gethash "Daiki Ueno" lsdb-hash-table)
 
