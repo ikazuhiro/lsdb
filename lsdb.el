@@ -416,7 +416,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  " test equal data (")
   (lsdb-maphash
    (lambda (key value)
-     (insert (prin1-to-string key) " " (prin1-to-string value) " "))
+     (let (print-level print-length)
+       (insert (prin1-to-string key) " " (prin1-to-string value) " ")))
    hash-table)
   (insert "))"))
 
