@@ -6,6 +6,19 @@ for SEMI based MUA.  It's intended to be a lightweight relacement for
 BBDB (The Insidious Big Brother Database).  Unfortunately, it
 currently doesn't support the all features of BBDB.
 
+.* Requirements
+LSDB works under following environment at least:
+
+  - Emacs 20.7
+  - XEmacs 21.4 or later
+
+You will also need the following libraries:
+
+  - APEL 10.2 or later
+       ftp://ftp.m17n.org/pub/mule/apel/
+  - FLIM 1.12 or later
+       ftp://ftp.m17n.org/pub/mule/flim/
+
 .* Installation
 
 .. (a) run in expanded place
@@ -77,30 +90,35 @@ functions, set lsdb-insert-x-face-function as follows:
 	(insert-image (x-face-create-image x-face :scale-factor 0.5))))
 
 .* Bug reports
-If you found bugs, please drop a note to the EMACS-MIME Mailing List:
+If you found bugs, please drop a note to the Lsdb-info Mailing List:
 
-	emacs-mime-en@m17n.org	(English)
-	emacs-mime-ja@m17n.org	(Japanese)
+   lsdb-info@lists.sourceforge.jp
+
+.* File Release
+Latest version of LSDB can be found at:
+
+   http://sourceforge.jp/projects/lsdb/files/
 
 .* API
 The API are quite simple but not written in a way that maximizes
 flexibility.
 
-.. Gathering Records
-. : lsdb-update-records<f>
+.. Record Management
+. : Gathering Records
+.  , lsdb-update-records<f>
 lsdb-update-records<f> is called from the buffer which contains raw
 contents of MIME entity.  Once it is called, it returns a list of
 records which could be gathered from the buffer.
 
-.. Display Records
-. : lsdb-display-record<f>
+. : Display Records
+.  , lsdb-display-record<f>
 lsdb-display-record<f> takes only one record, pops up a window, and
 displays the formatted contents of the record within the window.
 If you want to multiple records such as search results at the same
 time, use lsdb-display-records<f> instead.
 
 .. Internal Data Model
-. : lsdb-hash-table
+. : Primary Hash Table
 lsdb-hash-table is the variable which holds all the records in LSDB.
 You can operate on this variable in similar fashion to CL's
 hash-table: lsdb-puthash for puthash, lsdb-gethash to gethash,
@@ -118,6 +136,57 @@ write the following expression to get the record for "Daiki Ueno":
  (attribution . "DU")
  (user-agent "T-gnus/6.15.6 (based on Oort Gnus v0.06) (revision 03)"))
 
+. : Secondary Hash Tables
+LSDB can also have one or more number of secondary hash tables.  These
+hash tables are mainly used to hint lsdb-hash-table to gather
+additional relationship information between record name and entries.
+For example, lsdb-address-cache is a kind of secondary hash table
+which holds the mapping of mail addresses to record names.
+
+The variable lsdb-secondary-hash-tables holds a list where each
+element is corresponding to the name of global variable such as
+lsdb-address-cache.  When the primary hash table is loaded or saved,
+the secondary hash tables will be handled automatically.
+
+.  , Operate on Secondary Hash Tables
+You will need to follow the manner of the LSDB hooks.
+
+.   ; lsdb-lookup-full-name-functions
+List of functions to pick up the existing full-name of the sender.
+The sender is passed to each function as the argument.
+
+.   ; lsdb-update-record-functions
+List of functions called after a record is modified.
+The modified record is passed to each function as the argument.
+
+.* Development
+.. CVS
+Development of LSDB uses CVS.  So latest developing version is
+available at CVS.
+
+. : cvs login (first time only)
+
+  % cvs -d :pserver:anonymous@cvs.m17n.org:/cvs/root login
+
+  CVS password: [CR] # NULL string
+
+. : checkout
+
+  % cvs -d :pserver:anonymous@cvs.m17n.org:/cvs/root checkout lsdb
+
+  If you would like to join CVS based development, please send mail to
+
+  cvs@cvs.m17n.org
+
+with your account name and your public key for ssh.  cvsroot is
+:ext:cvs@cvs.m17n.org:/cvs/root.
+
+If you cannot use ssh, please send UNIX /etc/passwd style crypted
+password.  you can commit with the cvsroot
+:pserver:<accountname>@cvs.m17n.org:/cvs/root.
+
+We hope you will join the open development.
+ 
 .* Local emacs vars.
 The following `outline-layout' local variable setting:
   - closes all topics from the first topic to just before the third-to-last,
