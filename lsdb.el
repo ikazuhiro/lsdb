@@ -934,7 +934,7 @@ Modify whole identification by side effect."
     (if record
 	(progn
 	  (setq net (car (cdr (assq 'net (cdr record)))))
-	  (if (equal net (car record))
+	  (if (and net (equal net (car record)))
 	      (setq lsdb-modeline-string net)
 	    (setq lsdb-modeline-string (concat (car record) " <" net ">"))))
       (setq lsdb-modeline-string ""))))
@@ -950,28 +950,28 @@ Modify whole identification by side effect."
 
 (defun lsdb-current-record ()
   "Return the current record name."
-  (let ((record (get-text-property (point) 'lsdb-record)))
-    (unless record
-      (error "There is nothing to follow here"))
-    record))
+  (get-text-property (point) 'lsdb-record))
 
 (defun lsdb-current-entry ()
-  "Return the current entry name.
-If the point is not on a entry line, it prompts to select a entry in
-the current record."
+  "Return the current entry name in canonical form."
   (save-excursion
     (beginning-of-line)
-    (if (looking-at "^[^\t]")
-	(let ((record (lsdb-current-record))
-	      (completion-ignore-case t))
+    (if (looking-at "^\t\\([^\t][^:]+\\):")
+	(intern (downcase (match-string 1))))))
+
+(defun lsdb-read-entry (record &optional prompt)
+  "Prompt to select an entry in the given RECORD."
+  (let* ((completion-ignore-case t)
+	 (entry-name
 	  (completing-read
-	   "Which entry to modify: "
+	   (or prompt
+	       "Which entry: ")
 	   (mapcar (lambda (entry)
 		     (list (capitalize (symbol-name (car entry)))))
-		   (cdr record))))
-      (end-of-line)
-      (re-search-backward "^\t\\([^\t][^:]+\\):")
-      (match-string 1))))
+		   (cdr record))
+	   nil t)))
+    (unless (equal entry-name "")
+      (intern (downcase entry-name)))))
 
 (defun lsdb-mode-add-entry (entry-name)
   "Add an entry on the current line."
@@ -1012,9 +1012,13 @@ the current record."
   (interactive)
   (let ((record (lsdb-current-record))
 	entry)
-    (or entry-name
-	(setq entry-name (lsdb-current-entry)))
-    (setq entry (assq (intern (downcase entry-name)) (cdr record)))
+    (unless record
+      (error "There is nothing to follow here"))
+    (unless entry-name
+      (setq entry-name (or (lsdb-current-entry)
+			   (lsdb-read-entry
+			    record "Which entry to delete: "))))
+    (setq entry (assq entry-name (cdr record)))
     (when (and entry
 	       (not dont-update))
       (setcdr record (delq entry (cdr record)))
@@ -1029,8 +1033,9 @@ the current record."
 	    buffer-read-only)
 	(goto-char (point-min))
 	(if (re-search-forward
-	     (concat "^\t" (or entry-name
-			       (lsdb-current-entry))
+	     (concat "^\t" (capitalize (symbol-name
+					(or entry-name
+					    (lsdb-current-entry))))
 		     ":")
 	     nil t)
 	    (delete-region (match-beginning 0)
@@ -1042,10 +1047,14 @@ the current record."
 (defun lsdb-mode-edit-entry ()
   "Edit the entry on the current line."
   (interactive)
-  (let* ((record (lsdb-current-record))
-	 (entry-name (intern (downcase (lsdb-current-entry))))
-	 (entry (assq entry-name (cdr record)))
-	 (marker (point-marker)))
+  (let ((record (lsdb-current-record))
+	entry-name entry marker)
+    (unless record
+      (error "There is nothing to follow here"))
+    (setq entry-name (or (lsdb-current-entry)
+			 (lsdb-read-entry record "Which entry to edit: "))
+	  entry (assq entry-name (cdr record))
+	  marker (point-marker))
     (lsdb-edit-form
      (cdr entry) "Editing the entry."
      `(lambda (form)
@@ -1053,14 +1062,17 @@ the current record."
 	  (save-excursion
 	    (set-buffer lsdb-buffer-name)
 	    (goto-char ,marker)
-	    (let* ((record (lsdb-current-record))
-		   (entry (assq ',entry-name (cdr record)))
-		   (inhibit-read-only t)
-		   buffer-read-only)
+	    (let ((record (lsdb-current-record))
+		  entry
+		  (inhibit-read-only t)
+		  buffer-read-only)
+	      (unless record
+		(error "The entry currently in editing is discarded"))
+	      (setq entry (assq ',entry-name (cdr record)))
 	      (setcdr entry form)
 	      (run-hook-with-args 'lsdb-update-record-functions record)
 	      (setq lsdb-hash-tables-are-dirty t)
-	      (lsdb-mode-delete-entry (symbol-name ',entry-name) t)
+	      (lsdb-mode-delete-entry ',entry-name t)
 	      (beginning-of-line)
 	      (add-text-properties
 	       (point)
@@ -1147,8 +1159,6 @@ performed against the entry field."
     (lsdb-maphash
      (if entry-name
 	 (progn
-	   (unless (symbolp entry-name)
-	     (setq entry-name (intern (downcase entry-name))))
 	   (lambda (key value)
 	     (let ((entry (cdr (assq entry-name value)))
 		   found)
@@ -1183,7 +1193,8 @@ performed against the entry field."
 	   (format "Search records `%s' regexp: " entry-name)
 	 "Search records regexp: ")
        nil nil nil 'lsdb-mode-lookup-history)
-      entry-name)))
+      (if (and entry-name (not (equal entry-name "")))
+	  (intern (downcase entry-name))))))
   (lsdb-maybe-load-hash-tables)
   (let ((records (lsdb-lookup-records regexp entry-name)))
     (if records
