@@ -437,6 +437,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 ;;;_. Completion
 (defvar lsdb-last-completion nil)
 (defvar lsdb-last-candidates nil)
+(defvar lsdb-last-candidates-pointer nil)
 
 (defun lsdb-complete-name ()
   "Complete the user full-name or net-address before point"
@@ -446,16 +447,14 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	    (re-search-backward "\\(\\`\\|[\n:,]\\)[ \t]*")
 	    (goto-char (match-end 0))
 	    (point)))
-	 (string
-	  (if (eq last-command this-command)
-	      lsdb-last-completion
-	    (buffer-substring start (point))))
-	 (pattern
-	  (concat "\\<" string))
+	 pattern
 	 (case-fold-search t)
 	 (completion-ignore-case t))
     (unless (eq last-command this-command)
-      (setq lsdb-last-candidates nil)
+      (setq lsdb-last-candidates nil
+	    lsdb-last-candidates-pointer nil
+	    lsdb-last-completion (buffer-substring start (point))
+	    pattern (concat "\\<" lsdb-last-completion))
       (lsdb-maphash
        (lambda (key value)
 	 (let ((net (cdr (assq 'net value))))
@@ -471,12 +470,12 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	       (if (string-match pattern (car net))
 		   (push (car net) lsdb-last-candidates))
 	       (setq net (cdr net))))))
-       lsdb-hash-table)
-      (setq lsdb-last-completion string))
-    (unless lsdb-last-candidates
-      (error "No match"))
-    (delete-region start (point))
-    (insert (pop lsdb-last-candidates))))
+       lsdb-hash-table))
+    (unless lsdb-last-candidates-pointer
+      (setq lsdb-last-candidates-pointer lsdb-last-candidates))
+    (when lsdb-last-candidates-pointer
+      (delete-region start (point))
+      (insert (pop lsdb-last-candidates-pointer)))))
 
 ;;;_. Major Mode (`lsdb-mode') Implementation
 (define-derived-mode lsdb-mode fundamental-mode "LSDB"
