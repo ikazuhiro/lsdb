@@ -24,13 +24,24 @@
 
 ;;; Commentary:
 
+;;; For Semi-gnus:
 ;;; (autoload 'lsdb-gnus-insinuate "lsdb")
 ;;; (autoload 'lsdb-gnus-insinuate-message "lsdb")
 ;;; (add-hook 'gnus-startup-hook 'lsdb-gnus-insinuate)
-;;; (add-hook 'message-setup-hook 'lsdb-gnus-insinuate-message)
+;;; (add-hook 'message-setup-hook
+;;;           (lambda ()
+;;;             (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
+
+;;; For Wanderlust, put the following lines into your ~/.wl:
+;;; (require 'lsdb)
+;;; (lsdb-wl-insinuate)
+;;; (add-hook 'wl-draft-mode-hook
+;;;           (lambda ()
+;;;             (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
 
 ;;; Code:
 
+(require 'poem)
 (require 'mime)
 
 ;;;_* USER CUSTOMIZATION VARIABLES:
@@ -74,11 +85,13 @@ where the last three elements are optional."
   :type 'list)
 
 (defcustom lsdb-entry-type-alist
-  '((net 3 ?,)
+  '((net 5 ?,)
     (creation-date 2)
-    (mailing-list 1 ?,)
-    (attribution 1 ?.)
-    (organization 1))
+    (last-modified 2)
+    (mailing-list 3 ?,)
+    (attribution 3 ?.)
+    (organization 3)
+    (score -1))
   "Alist of entries to display.
 The format of elements of this list should be
      (ENTRY SCORE CLASS)
@@ -181,8 +194,10 @@ where the last element is optional."
   (defun lsdb-gethash (key hash-table &optional default)
     "Find hash value for KEY in HASH-TABLE.
 If there is no corresponding value, return DEFAULT (which defaults to nil)."
-    (or (intern-soft key (nth 1 hash-table))
-	default))
+    (let ((symbol (intern-soft key (nth 1 hash-table))))
+      (if symbol
+	  (symbol-value symbol)
+	default)))
   (defun lsdb-remhash (key hash-table)
     "Remove the entry for KEY from HASH-TABLE.
 Do nothing if there is no entry for KEY in HASH-TABLE."
@@ -267,16 +282,17 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (lsdb-save-file lsdb-file lsdb-hash-table)))
 
 ;;;_. Mail Header Extraction
-(defun lsdb-fetch-field-bodies (entity regexp)
+(defun lsdb-fetch-field-bodies (regexp)
   (save-excursion
     (goto-char (point-min))
     (let ((case-fold-search t)
 	  field-bodies)
-      (while (re-search-forward (concat "^\\(" regexp "\\):[ \t]*") nil t)
+      (while (re-search-forward (concat "^\\(" regexp "\\):[ \t]*")
+				nil t)
 	(push (funcall lsdb-decode-field-body-function
-		       (buffer-substring (point) (std11-field-end))
-		       (match-string 1))
-	      field-bodies))
+			     (buffer-substring (point) (std11-field-end))
+			     (match-string 1))
+		    field-bodies))
       (nreverse field-bodies))))
 
 (defun lsdb-canonicalize-spaces-and-dots (string)
@@ -296,11 +312,16 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 ;; stolen (and renamed) from nnheader.el
 (defun lsdb-decode-field-body (field-body field-name
 					  &optional mode max-column)
-  (mime-decode-field-body field-body
-			  (if (stringp field-name)
-			      (intern (capitalize field-name))
-			    field-name)
-			  mode max-column))
+  (let ((multibyte enable-multibyte-characters))
+    (unwind-protect
+	(progn
+	  (set-buffer-multibyte t)
+	  (mime-decode-field-body field-body
+				  (if (stringp field-name)
+				      (intern (capitalize field-name))
+				    field-name)
+				  mode max-column))
+      (set-buffer-multibyte multibyte))))
 
 ;;;_. Record Management
 (defun lsdb-maybe-load-file ()
@@ -321,27 +342,30 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (setq merged (lsdb-merge-record-entries old new)
 	  record (cons (nth 1 sender) merged))
     (unless (equal merged old)
+      (let ((entry (assq 'last-modified (cdr record)))
+	    (last-modified (format-time-string "%Y-%m-%d")))
+	(if entry
+	    (setcdr entry last-modified)
+	  (setcdr record (cons (cons 'last-modified last-modified)
+			       (cdr record)))))
       (lsdb-puthash (car record) (copy-sequence (cdr record))
 		    lsdb-hash-table)
       (setq lsdb-hash-table-is-dirty t))
     record))
 
-(defun lsdb-update-records (entity)
+(defun lsdb-update-records ()
   (lsdb-maybe-load-file)
   (let (senders recipients interesting alist records bodies entry)
-    (with-temp-buffer
-      (set-buffer-multibyte nil)
-      (buffer-disable-undo)
-      (mime-insert-entity entity)
+    (save-restriction
       (std11-narrow-to-header)
       (setq senders
 	    (delq nil (mapcar #'lsdb-extract-address-components
 			      (lsdb-fetch-field-bodies
-			       entity lsdb-sender-headers)))
+			       lsdb-sender-headers)))
 	    recipients
 	    (delq nil (mapcar #'lsdb-extract-address-components
 			      (lsdb-fetch-field-bodies
-			       entity lsdb-recipients-headers))))
+			       lsdb-recipients-headers))))
       (setq alist lsdb-interesting-header-alist)
       (while alist
 	(setq bodies
@@ -351,7 +375,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 			  (string-match (nth 1 (car alist)) field-body))
 		     (replace-match (nth 3 (car alist)) nil nil field-body)
 		   field-body))
-	       (lsdb-fetch-field-bodies entity (car (car alist)))))
+	       (lsdb-fetch-field-bodies (car (car alist)))))
 	(when bodies
 	  (setq entry (or (nth 2 (car alist))
 			  'notes))
@@ -495,16 +519,30 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (add-hook 'gnus-article-prepare-hook 'lsdb-gnus-update-record)
   (add-hook 'gnus-save-newsrc-hook 'lsdb-offer-save))
 
-(defvar message-mode-map)
-(defun lsdb-gnus-insinuate-message ()
-  "Call this function to hook LSDB into Message mode."
-  (define-key message-mode-map "\M-\t" 'lsdb-complete-name))
-
 (defvar gnus-current-headers)
 (defun lsdb-gnus-update-record ()
-  (let ((records (lsdb-update-records gnus-current-headers)))
-    (when records
-      (lsdb-display-record (car records)))))
+  (let ((entity gnus-current-headers)
+	records)
+    (with-temp-buffer
+      (set-buffer-multibyte nil)
+      (buffer-disable-undo)
+      (mime-insert-entity entity)
+      (setq records (lsdb-update-records))
+      (when records
+	(lsdb-display-record (car records))))))
+
+;;;_. Interface to Wanderlust
+(defun lsdb-wl-insinuate ()
+  "Call this function to hook LSDB into Wanderlust."
+  (add-hook 'wl-message-redisplay-hook 'lsdb-wl-update-record)
+  (add-hook 'wl-exit-hook 'lsdb-offer-save))
+
+(defun lsdb-wl-update-record ()
+  (save-excursion
+    (set-buffer (wl-message-get-original-buffer))
+    (let ((records (lsdb-update-records)))
+      (when records
+	(lsdb-display-record (car records))))))
 
 (provide 'lsdb)
 
