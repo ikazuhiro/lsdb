@@ -773,8 +773,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 		   (marker-position lsdb-complete-marker))
 	      (save-excursion
 		(re-search-backward "\\(\\`\\|[\n:,]\\)[ \t]*")
-		(goto-char (match-end 0))
-		(point))))
+		(set-marker lsdb-complete-marker (match-end 0)))))
 	 pattern
 	 (case-fold-search t)
 	 (completion-ignore-case t))
@@ -1366,7 +1365,7 @@ always hide."
 	(set-window-buffer window buffer)
 	(lsdb-fit-window-to-buffer window)))))
 
-;;;_. Interface to Mew written by Hideyuki SHIRAI <shirai@rdmg.mgcs.mei.co.jp>
+;;;_. Interface to Mew written by Hideyuki SHIRAI <shirai@meadowy.org>
 (eval-when-compile
   (autoload 'mew-sinfo-get-disp-msg "mew")
   (autoload 'mew-current-get-fld "mew")
