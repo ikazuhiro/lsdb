@@ -9,15 +9,15 @@ currently doesn't support the all features of BBDB.
 .* Requirements
 LSDB works under following environment at least:
 
-  - Emacs 20.7
-  - XEmacs 21.4 or later
+ * Emacs 20.7
+ * XEmacs 21.4 or later
 
 You will also need the following libraries:
 
-  - APEL 10.2 or later
-       ftp://ftp.m17n.org/pub/mule/apel/
-  - FLIM 1.12 or later
-       ftp://ftp.m17n.org/pub/mule/flim/
+ * APEL 10.2 or later
+  * ftp://ftp.m17n.org/pub/mule/apel/
+ * FLIM 1.12 or later
+  * ftp://ftp.m17n.org/pub/mule/flim/
 
 .* Installation
 
@@ -26,11 +26,11 @@ You will also need the following libraries:
 If you don't want to install other directories, please do only
 following:
 
-	% make
+  % make
 
 You can specify the emacs command name, for example
 
-	% make install EMACS=xemacs
+  % make install EMACS=xemacs
 
 If `EMACS=...' is omitted, EMACS=emacs is used.
 
@@ -38,14 +38,14 @@ If `EMACS=...' is omitted, EMACS=emacs is used.
 
 If you want to install other directories, please do following:
 
-	% make install
+  % make install
 
 .. (c) install as a XEmacs package
 
 If you want to install to XEmacs package directory, please do
 following:
 
-	% make install-package
+  % make install-package
 
 .* MUA Specific Installation
 
@@ -56,62 +56,66 @@ supported.
 If you use Semi-gnus or its variant, put the following lines into your
 ~/.gnus and you will get the functions in this package autoloaded.
 
-(autoload 'lsdb-gnus-insinuate "lsdb")
-(autoload 'lsdb-gnus-insinuate-message "lsdb")
-(add-hook 'gnus-startup-hook 'lsdb-gnus-insinuate)
+  (autoload 'lsdb-gnus-insinuate "lsdb")
+  (autoload 'lsdb-gnus-insinuate-message "lsdb")
+  (add-hook 'gnus-startup-hook 'lsdb-gnus-insinuate)
 
-;; If you are using T-gnus 6.15.7 or later, type M-x
-;; customize-variable and set message-expand-name-function to
-;; lsdb-complete-name, instead of adding the following lines.
-;; (add-hook 'message-setup-hook
-;;           (lambda ()
-;;              (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
+  ;; If you are using T-gnus 6.15.7 or later, type M-x
+  ;; customize-variable and set message-expand-name-function to
+  ;; lsdb-complete-name, instead of adding the following lines.
+  ;; (add-hook 'message-setup-hook
+  ;;           (lambda ()
+  ;;              (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
 
-(add-hook 'gnus-summary-mode-hook
-          (lambda ()
-            (define-key gnus-summary-mode-map ":" 'lsdb-toggle-buffer)))
+  (add-hook 'gnus-summary-mode-hook
+            (lambda ()
+              (define-key gnus-summary-mode-map ":" 'lsdb-toggle-buffer)))
 
 If you use Wanderlust, put the following lines into your ~/.wl:
-(require 'lsdb)
-(lsdb-wl-insinuate)
-(add-hook 'wl-draft-mode-hook
-          (lambda ()
-             (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
-(add-hook 'wl-summary-mode-hook
-          (lambda ()
-            (define-key wl-summary-mode-map ":" 'lsdb-wl-toggle-buffer)))
+
+  (require 'lsdb)
+  (lsdb-wl-insinuate)
+  (add-hook 'wl-draft-mode-hook
+            (lambda ()
+               (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
+  (add-hook 'wl-summary-mode-hook
+            (lambda ()
+              (define-key wl-summary-mode-map ":" 'lsdb-wl-toggle-buffer)))
 
 If you use Mew, put the following lines into your ~/.mew:
-(autoload 'lsdb-mew-insinuate "lsdb")
-(add-hook 'mew-init-hook 'lsdb-mew-insinuate)
-(add-hook 'mew-draft-mode-hook
-          (lambda ()
-             (define-key mew-draft-header-map "\M-I" 'lsdb-complete-name)))
-(add-hook 'mew-summary-mode-hook
-          (lambda ()
-            (define-key mew-summary-mode-map "L" 'lsdb-toggle-buffer)))
+
+  (autoload 'lsdb-mew-insinuate "lsdb")
+  (add-hook 'mew-init-hook 'lsdb-mew-insinuate)
+  (add-hook 'mew-draft-mode-hook
+            (lambda ()
+               (define-key mew-draft-header-map "\M-I" 'lsdb-complete-name)))
+  (add-hook 'mew-summary-mode-hook
+            (lambda ()
+              (define-key mew-summary-mode-map "L" 'lsdb-toggle-buffer)))
 
 If you use MU-CITE, put the following lines into your ~/.emacs:
-(autoload 'lsdb-mu-insinuate "lsdb")
-(eval-after-load "mu-cite"
-  '(lsdb-mu-insinuate))
+
+  (autoload 'lsdb-mu-insinuate "lsdb")
+  (eval-after-load "mu-cite"
+    '(lsdb-mu-insinuate))
 
 If you want to use x-face-e21 instead of the LSDB's builtin X-Face
 functions, set lsdb-insert-x-face-function as follows:
-(setq lsdb-insert-x-face-function
-      (lambda (x-face)
-	(require 'x-face-e21)
-	(insert-image (x-face-create-image x-face :scale-factor 0.5))))
+
+  (setq lsdb-insert-x-face-function
+        (lambda (x-face)
+          (require 'x-face-e21)
+          (insert-image (x-face-create-image x-face :scale-factor 0.5))))
 
 .* Bug Reports
 If you found bugs, please drop a note to the Lsdb-info Mailing List:
 
-   lsdb-info@lists.sourceforge.jp
+ * lsdb-info@lists.sourceforge.jp
 
 .* File Release
 Latest version of LSDB can be found at:
 
-   http://sourceforge.jp/projects/lsdb/files/
+ * http://sourceforge.jp/projects/lsdb/files/
 
 .* API
 The API are quite simple but not written in a way that maximizes
@@ -139,16 +143,16 @@ hash-table: lsdb-puthash for puthash, lsdb-gethash to gethash,
 lsdh-maphash to maphash are available to you.  For example, you can
 write the following expression to get the record for "Daiki Ueno":
 
-(lsdb-gethash "Daiki Ueno" lsdb-hash-table)
-
-=>
-
-((last-modified . "2002-04-23")
- (creation-date . "2002-04-26")
- (net "ueno@unixuser.org")
- (mailing-list "emacs-mime-ja")
- (attribution . "DU")
- (user-agent "T-gnus/6.15.6 (based on Oort Gnus v0.06) (revision 03)"))
+  (lsdb-gethash "Daiki Ueno" lsdb-hash-table)
+  
+  =>
+  
+  ((last-modified . "2002-04-23")
+   (creation-date . "2002-04-26")
+   (net "ueno@unixuser.org")
+   (mailing-list "emacs-mime-ja")
+   (attribution . "DU")
+   (user-agent "T-gnus/6.15.6 (based on Oort Gnus v0.06) (revision 03)"))
 
 . : Secondary Hash Tables
 LSDB can also have one or more secondary hash tables.  These hash
@@ -181,14 +185,13 @@ available at CVS.
 . : cvs login (first time only)
 
   % cvs -d :pserver:anonymous@cvs.m17n.org:/cvs/root login
-
   CVS password: [CR] # NULL string
 
 . : checkout
 
   % cvs -d :pserver:anonymous@cvs.m17n.org:/cvs/root checkout lsdb
 
-  If you would like to join CVS based development, please send mail to
+If you would like to join CVS based development, please send mail to
 
   cvs@cvs.m17n.org
 
@@ -203,16 +206,17 @@ We hope you will join the open development.
  
 
 .* Authors
-Daiki Ueno <ueno@unixuser.org>
-Hideyuki SHIRAI <shirai@meadowy.org> (support for Mew)
-Yuuichi Teranishi <teranisi@gohome.org>
+ * Daiki Ueno <ueno@unixuser.org>
+ * Hideyuki SHIRAI <shirai@meadowy.org> (support for Mew)
+ * Yuuichi Teranishi <teranisi@gohome.org>
+ * TSUCHIYA Masatoshi  <tsuchiya@namazu.org>
 
 .* Local emacs vars.
-The following `outline-layout' local variable setting:
+The following `allout-layout' local variable setting:
   - closes all topics from the first topic to just before the third-to-last,
   - shows the children of the third to last (config vars)
   - and the second to last (code section),
   - and closes the last topic (this local-variables section).
 Local variables:
-outline-layout: (0 : -1 -1 0)
+allout-layout: (0 : -1 -1 0)
 End:
