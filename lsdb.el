@@ -1811,11 +1811,12 @@ the user wants it."
 	 (process-connection-type nil)
 	 (cached (cdr (assq type (lsdb-gethash x-face lsdb-x-face-cache))))
 	 (marker (point-marker))
-	 (buffer (generate-new-buffer " *lsdb work*"))
+	 buffer
 	 process)
     (if cached
 	(lsdb-insert-x-face-image cached type marker)
-      (setq process
+      (setq buffer (generate-new-buffer " *lsdb work*")
+	    process
 	    (start-process-shell-command
 	     "lsdb-x-face-command" buffer
 	     (concat "{ "
@@ -1916,11 +1917,12 @@ the user wants it."
 	 (process-connection-type nil)
 	 (cached (cdr (assq type (lsdb-gethash face lsdb-face-cache))))
 	 (marker (point-marker))
-	 (buffer (generate-new-buffer " *lsdb work*"))
+	 buffer
 	 process)
     (if cached
 	(lsdb-insert-face-image cached type marker)
-      (setq process
+      (setq buffer (generate-new-buffer " *lsdb work*")
+	    process
 	    (start-process-shell-command
 	     "lsdb-face-command" buffer
 	     (concat "{ "
