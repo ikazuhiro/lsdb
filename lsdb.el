@@ -42,6 +42,7 @@
 ;;; Code:
 
 (require 'poem)
+(require 'pces)
 (require 'mime)
 
 ;;;_* USER CUSTOMIZATION VARIABLES:
@@ -55,7 +56,7 @@
   :group 'lsdb
   :type 'file)
 
-(defcustom lsdb-file-coding-system 'iso-2022-jp
+(defcustom lsdb-file-coding-system (find-coding-system 'iso-2022-jp)
   "Coding system for `lsdb-file'."
   :group 'lsdb
   :type 'symbol)
@@ -299,7 +300,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 		  (if (symbolp lsdb-file-coding-system)
 		      (symbol-name lsdb-file-coding-system)
 		    ;; XEmacs
-		    (coding-system-name lsdb-file-coding-system))
+		    (symbol-name (coding-system-name lsdb-file-coding-system)))
 		  " -*-\n"))
       (insert "#s(hash-table size "
 	      (number-to-string (lsdb-hash-table-size hash-table))
@@ -717,6 +718,29 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	(bury-buffer)
       (delete-window))))
 
+(defun lsdb-lookup-records (regexp &optional entry-name)
+  (let (records)
+    (lsdb-maphash
+     (if entry-name
+	 (progn
+	   (unless (symbolp entry-name)
+	     (setq entry-name (intern (downcase entry-name))))
+	   (lambda (key value)
+	     (let ((entry (cdr (assq entry-name value)))
+		   found)
+	       (unless (listp entry)
+		 (setq entry (list entry)))
+	       (while (and (not found) entry)
+		 (if (string-match regexp (pop entry))
+		     (setq found t)))
+	       (if found
+		   (push (cons key value) records)))))
+       (lambda (key value)
+	 (if (string-match regexp key)
+	     (push (cons key value) records))))
+     lsdb-hash-table)
+    records))
+
 (defvar lsdb-mode-lookup-history nil)
 
 (defun lsdb-mode-lookup (regexp &optional entry-name)
@@ -734,26 +758,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	 "Search records regexp: ")
        nil nil nil 'lsdb-mode-lookup-history)
       entry-name)))
-  (let (records)
-    (lsdb-maybe-load-file)
-    (lsdb-maphash
-     (if entry-name
-	 (lambda (key value)
-	   (let ((entry (cdr (assq (intern (downcase entry-name))
-				   value)))
-		 found)
-	     (unless (listp entry)
-	       (setq entry (list entry)))
-	     (while (and (not found) entry)
-	       (if (string-match regexp (pop entry))
-		   (setq found t)))
-	     (if found
-		 (push (cons key value) records))))
-       (lambda (key value)
-	 (if (string-match regexp key)
-	     (push (cons key value) records))))
-     lsdb-hash-table)
-    (lsdb-display-records records)))
+  (lsdb-maybe-load-file)
+  (let ((records (lsdb-lookup-records regexp entry-name)))
+    (if records
+	(lsdb-display-records records))))
 
 ;;;###autoload
 (defalias 'lsdb 'lsdb-mode-lookup)
@@ -890,6 +898,94 @@ of the buffer."
   (let ((window (get-buffer-window lsdb-buffer-name)))
     (if window
 	(delete-window window))))
+
+;;;_. Interface to MU-CITE
+(defun lsdb-mu-attribution (address)
+  "Extract attribute information from LSDB."
+  (let ((records
+	 (lsdb-lookup-records (concat "\\<" address "\\>") 'net)))
+    (if records
+	(cdr (assq 'attribution (cdr (car records)))))))
+
+(defun lsdb-mu-set-attribution (attribution address)
+  "Add attribute information to LSDB."
+  (let ((records
+	 (lsdb-lookup-records (concat "\\<" address "\\>") 'net))
+	entry)
+    (when records
+      (setq entry (assq 'attribution (cdr (car records))))
+      (if entry
+	  (setcdr entry attribution)
+	(setcdr (car records) (cons (cons 'attribution attribution)
+				    (cdr (car records))))
+	(lsdb-puthash (car (car records)) (cdr (car records))
+		      lsdb-hash-table)
+	(setq lsdb-hash-table-is-dirty t)))))
+
+(defun lsdb-mu-get-prefix-method ()
+  "A mu-cite method to return a prefix from LSDB or \">\".
+If an `attribution' value is found in LSDB, the value is returned.
+Otherwise \">\" is returned."
+  (or (lsdb-mu-attribution (mu-cite-get-value 'address))
+      ">"))
+
+(defvar minibuffer-allow-text-properties)
+
+(defvar lsdb-mu-history nil)
+
+(defun lsdb-mu-get-prefix-register-method ()
+  "A mu-cite method to return a prefix from LSDB or register it.
+If an `attribution' value is found in LSDB, the value is returned.
+Otherwise the function requests a prefix from a user.  The prefix will
+be registered to LSDB if the user wants it."
+  (let ((address (mu-cite-get-value 'address)))
+    (or (lsdb-mu-attribution address)
+	(let* (minibuffer-allow-text-properties
+	       (result (read-string "Citation name? "
+				    (or (mu-cite-get-value 'x-attribution)
+					(mu-cite-get-value 'full-name))
+				    'lsdb-mu-history)))
+	  (if (and (not (string-equal result ""))
+		   (y-or-n-p (format "Register \"%s\"? " result)))
+	      (lsdb-mu-set-attribution result address))
+	  result))))
+
+(defun lsdb-mu-get-prefix-register-verbose-method ()
+  "A mu-cite method to return a prefix using LSDB.
+
+In this method, a user must specify a prefix unconditionally.  If an
+`attribution' value is found in LSDB, the value is used as a initial
+value to input the prefix.  The prefix will be registered to LSDB if
+the user wants it."
+  (let* ((address (mu-cite-get-value 'address))
+	 (attribution (lsdb-mu-attribution address))
+	 minibuffer-allow-text-properties
+	 (result (read-string "Citation name? "
+			      (or attribution
+				  (mu-cite-get-value 'x-attribution)
+				  (mu-cite-get-value 'full-name))
+			      'lsdb-mu-history)))
+    (if (and (not (string-equal result ""))
+	     (not (string-equal result attribution))
+	     (y-or-n-p (format "Register \"%s\"? " result)))
+	(lsdb-mu-set-attribution result address))
+    result))
+
+(defvar mu-cite-methods-alist)
+;;;###autoload
+(defun lsdb-mu-insinuate ()
+  (add-hook 'mu-cite-instantiation-hook
+	    (lambda ()
+	      (setq mu-cite-methods-alist
+		    (nconc
+		     mu-cite-methods-alist
+		     (list
+		      (cons 'lsdb-prefix
+			    #'lsdb-mu-get-prefix-method)
+		      (cons 'lsdb-prefix-register
+			    #'lsdb-mu-get-prefix-register-method)
+		      (cons 'lsdb-prefix-register-verbose
+			    #'lsdb-mu-get-prefix-register-verbose-method)))))))
 
 ;;;_. X-Face Rendering
 (defun lsdb-expose-x-face ()
