@@ -502,11 +502,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  ;; XEmacs doesn't have a distinction between index-size and
 	  ;; hash-table-size.
 	  (number-to-string (lsdb-hash-table-count hash-table))
-	  " test equal data (")
+	  " test equal data (\n")
   (lsdb-maphash
    (lambda (key value)
      (let (print-level print-length)
-       (insert (prin1-to-string key) " " (prin1-to-string value) " ")))
+       (insert (prin1-to-string key) " " (prin1-to-string value) "\n")))
    hash-table)
   (insert "))"))
 
@@ -1306,12 +1306,15 @@ then the name of this record will be edited."
       (lsdb-mode-edit-entry)
     (lsdb-mode-edit-record)))
 
-(defun lsdb-mode-save (&optional dont-ask)
+(defun lsdb-mode-save (&optional force)
   "Save LSDB hash table into `lsdb-file'."
-  (interactive (list t))
-  (if (not lsdb-hash-tables-are-dirty)
+  (interactive "P")
+  (if (not (or force
+	       lsdb-hash-tables-are-dirty))
       (message "(No changes need to be saved)")
-    (when (or dont-ask
+    (when (or (interactive-p)		;Don't ask user if this
+					;function is called as a
+					;command.
 	      (not lsdb-verbose)
 	      (y-or-n-p "Save the LSDB now? "))
       (lsdb-save-hash-tables)
