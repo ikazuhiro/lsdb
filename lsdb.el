@@ -461,7 +461,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 (defun lsdb-extract-address-components (string)
   (let ((components (std11-extract-address-components string)))
-    (if (nth 1 components)
+    (if (and (nth 1 components)
+	     ;; When parsing a group address,
+	     ;; std11-extract-address-components is likely to return
+	     ;; the ("GROUP" "") form.
+	     (not (equal (nth 1 components) "")))
 	(if (car components)
 	    (list (funcall lsdb-canonicalize-full-name-function
 			   (car components))
