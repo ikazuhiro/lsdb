@@ -258,6 +258,11 @@ Bourne shell or its equivalent \(not tcsh) is needed for \"2>\"."
   :group 'lsdb
   :type 'boolean)
 
+(defcustom lsdb-use-migemo nil
+  "If non-nil, use `migemo' when complete address."
+  :type 'boolean
+  :group 'lsdb)
+
 ;;;_. Faces
 (defface lsdb-header-face
   '((t (:underline t)))
@@ -803,12 +808,20 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 ;;;_ : Matching Highlight
 (defvar lsdb-last-highlight-overlay nil)
 
+;;;_. avoid byte-compile warning for migemo
+(eval-when-compile
+  (condition-case nil
+      (autoload 'migemo-get-pattern "migemo")
+    (error)))
+
 (defun lsdb-complete-name-highlight (start end)
   (make-local-hook 'pre-command-hook)
   (add-hook 'pre-command-hook 'lsdb-complete-name-highlight-update nil t)
   (save-excursion
     (goto-char start)
-    (search-forward lsdb-last-completion end)
+    (if (and lsdb-use-migemo (fboundp 'migemo-get-pattern))
+	(re-search-forward lsdb-last-completion end)
+      (search-forward lsdb-last-completion end))
     (setq lsdb-last-highlight-overlay
 	  (make-overlay (match-beginning 0) (match-end 0)))
     (overlay-put lsdb-last-highlight-overlay 'face
@@ -843,8 +856,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (unless (eq last-command this-command)
       (setq lsdb-last-candidates nil
 	    lsdb-last-candidates-pointer nil
-	    lsdb-last-completion (buffer-substring start (point))
-	    pattern (concat "\\<" (regexp-quote lsdb-last-completion)))
+	    lsdb-last-completion (buffer-substring start (point)))
+      (if (and lsdb-use-migemo (fboundp 'migemo-get-pattern))
+	  (setq lsdb-last-completion (migemo-get-pattern lsdb-last-completion)
+		pattern (concat "\\<\\(" lsdb-last-completion "\\)"))
+	(setq pattern (concat "\\<" (regexp-quote lsdb-last-completion))))
       (lsdb-maphash
        (lambda (key value)
 	 (setq lsdb-last-candidates
