@@ -138,7 +138,16 @@ where the last element is optional."
       #'lsdb-expose-x-face)
   "A hook called after a record is displayed."
   :group 'lsdb
-  :type 'function)
+  :type 'hook)
+
+(defgroup lsdb-edit-form nil
+  "A mode for editing forms."
+  :group 'lsdb)
+
+(defcustom lsdb-edit-form-mode-hook nil
+  "Hook run in `lsdb-edit-form-mode' buffers."
+  :group 'lsdb-edit-form
+  :type 'hook)
 
 ;;;_. Faces
 (defface lsdb-header-face
@@ -295,11 +304,6 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
        hash-table)
       (insert "))"))))
 
-(defun lsdb-offer-save ()
-  (if (and lsdb-hash-table-is-dirty
-	   (y-or-n-p "Save the LSDB now?"))
-      (lsdb-save-file lsdb-file lsdb-hash-table)))
-
 ;;;_. Mail Header Extraction
 (defun lsdb-fetch-field-bodies (regexp)
   (save-excursion
@@ -367,7 +371,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	    (setcdr entry last-modified)
 	  (setcdr record (cons (cons 'last-modified last-modified)
 			       (cdr record)))))
-      (lsdb-puthash (car record) (copy-sequence (cdr record))
+      (lsdb-puthash (car record) (cdr record)
 		    lsdb-hash-table)
       (setq lsdb-hash-table-is-dirty t))
     record))
@@ -462,12 +466,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	(narrow-to-region (point) (point))
 	(funcall lsdb-print-record-function (car records))
 	(add-text-properties (point-min) (point-max)
-			     (list 'lsdb-record (car records)
-				   ;; Forbid to expand the area the
-				   ;; text properties are effective.
-				   'start-open t ;XEmacs
-				   'rear-nonsticky t ;GNU Emacs
-				   ))
+			     (list 'lsdb-record (car records)))
 	(run-hooks 'lsdb-display-record-hook))
       (setq records (cdr records)))
     (lsdb-mode)))
@@ -475,24 +474,26 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defsubst lsdb-entry-score (entry)
   (or (nth 1 (assq (car entry) lsdb-entry-type-alist)) 0))
 
+(defun lsdb-insert-entry (entry)
+  (insert "\t" (capitalize (symbol-name (car entry))) ": "
+	  (if (listp (cdr entry))
+	      (mapconcat
+	       #'identity (cdr entry)
+	       (if (eq ?, (nth 2 (assq (car entry) lsdb-entry-type-alist)))
+		   ", "
+		 "\n\t\t"))
+	    (cdr entry))
+	  "\n"))
+
 (defun lsdb-print-record (record)
   (insert (car record) "\n")
   (let ((entries
-	 (sort (cdr record)
+	 (sort (copy-sequence (cdr record))
 	       (lambda (entry1 entry2)
 		 (> (lsdb-entry-score entry1) (lsdb-entry-score entry2))))))
     (while entries
       (if (>= (lsdb-entry-score (car entries)) 0)
-	  (insert "\t" (capitalize (symbol-name (car (car entries)))) ": "
-		  (if (listp (cdr (car entries)))
-		      (mapconcat
-		       #'identity (cdr (car entries))
-		       (if (eq ?, (nth 2 (assq (car (car entries))
-					       lsdb-entry-type-alist)))
-			   ", "
-			 "\n\t\t"))
-		    (cdr (car entries)))
-		  "\n"))
+	  (lsdb-insert-entry (car entries)))
       (setq entries (cdr entries)))))
 
 ;;;_. Completion
@@ -540,6 +541,24 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (insert (pop lsdb-last-candidates-pointer)))))
 
 ;;;_. Major Mode (`lsdb-mode') Implementation
+(defvar lsdb-mode-map
+  (let ((keymap (make-sparse-keymap)))
+    (define-key keymap "a" 'lsdb-mode-add-entry)
+    (define-key keymap "d" 'lsdb-mode-delete-entry)
+    (define-key keymap "e" 'lsdb-mode-edit-entry)
+    (define-key keymap "s" 'lsdb-mode-save)
+    (define-key keymap "q" 'lsdb-mode-quit-window)
+    keymap)
+  "LSDB's keymap.")
+
+(if (commandp 'quit-window)
+    (defalias 'lsdb-mode-quit-window 'quit-window)
+  (defun lsdb-mode-quit-window ()
+    (interactive)
+    (if (one-window-p)
+	(bury-buffer)
+      (delete-window))))
+
 (define-derived-mode lsdb-mode fundamental-mode "LSDB"
   "Major mode for browsing LSDB records."
   (setq buffer-read-only t)
@@ -550,12 +569,203 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (set (make-local-variable 'font-lock-defaults)
 	 '(lsdb-font-lock-keywords t))))
 
+(defun lsdb-narrow-to-record ()
+  (narrow-to-region
+   (or (previous-single-property-change (point) 'lsdb-record)
+       (point-min))
+   (or (next-single-property-change (point) 'lsdb-record)
+       (point-max))))
+
+(defun lsdb-current-entry ()
+  (save-excursion
+    (beginning-of-line)
+    (if (looking-at "^[^\t]")
+	(let ((record (get-text-property (point) 'lsdb-record))
+	      (completion-ignore-case t))
+	  (completing-read
+	   "Which entry to edit: "
+	   (mapcar (lambda (entry)
+		     (list (capitalize (symbol-name (car entry)))))
+		   (cdr record))))
+      (end-of-line)
+      (re-search-backward "^\t\\([^\t][^:]+\\):")
+      (match-string 1))))
+
+(defun lsdb-mode-add-entry (entry-name)
+  "Add an entry on the current line."
+  (interactive "sEntry name: ")
+  (beginning-of-line)
+  (unless (symbolp entry-name)
+    (setq entry-name (intern (downcase entry-name))))
+  (when (assq entry-name (cdr (get-text-property (point) 'lsdb-record)))
+    (error "The entry already exists"))
+  (let ((marker (point-marker)))
+    (lsdb-edit-form
+     nil "Editing the entry."
+     `(lambda (form)
+	(when form
+	  (save-excursion
+	    (set-buffer lsdb-buffer-name)
+	    (goto-char ,marker)
+	    (beginning-of-line)
+	    (let* ((record (get-text-property (point) 'lsdb-record))
+		   (inhibit-read-only t)
+		   buffer-read-only)
+	      (setcdr record (cons (cons ',entry-name form) (cdr record)))
+	      (lsdb-puthash (car record) (cdr record)
+			    lsdb-hash-table)
+	      (setq lsdb-hash-table-is-dirty t)
+	      (beginning-of-line)
+	      (add-text-properties
+	       (point)
+	       (progn
+		 (lsdb-insert-entry (cons ',entry-name form))
+		 (point))
+	       (list 'lsdb-record record)))))))))
+
+(defun lsdb-mode-delete-entry (&optional entry-name dont-update)
+  "Delete the entry on the current line."
+  (interactive)
+  (let ((record (get-text-property (point) 'lsdb-record))
+	entry)
+    (or entry-name
+	(setq entry-name (lsdb-current-entry)))
+    (setq entry (assq (intern (downcase entry-name)) (cdr record)))
+    (when (and entry
+	       (not dont-update))
+      (setcdr record (delq entry (cdr record)))
+      (lsdb-puthash (car record) (cdr record)
+		    lsdb-hash-table)
+      (setq lsdb-hash-table-is-dirty t))
+    (save-restriction
+      (lsdb-narrow-to-record)
+      (let ((case-fold-search t)
+	    (inhibit-read-only t)
+	    buffer-read-only)
+	(goto-char (point-min))
+	(if (re-search-forward
+	     (concat "^\t" (or entry-name
+			       (lsdb-current-entry))
+		     ":")
+	     nil t)
+	    (delete-region (match-beginning 0)
+			   (if (re-search-forward
+				"^\t[^\t][^:]+:" nil t)
+			       (match-beginning 0)
+			     (point-max))))))))
+
+(defun lsdb-mode-edit-entry ()
+  "Edit the entry on the current line."
+  (interactive)
+  (let* ((record (get-text-property (point) 'lsdb-record))
+	 (entry-name (intern (downcase (lsdb-current-entry))))
+	 (entry (assq entry-name (cdr record)))
+	 (marker (point-marker)))
+    (lsdb-edit-form
+     (cdr entry) "Editing the entry."
+     `(lambda (form)
+	(unless (equal form ',entry-name)
+	  (save-excursion
+	    (set-buffer lsdb-buffer-name)
+	    (goto-char ,marker)
+	    (let* ((record (get-text-property (point) 'lsdb-record))
+		   (entry (assq ',entry-name (cdr record)))
+		   (inhibit-read-only t)
+		   buffer-read-only)
+	      (setcdr entry form)
+	      (setq lsdb-hash-table-is-dirty t)
+	      (lsdb-mode-delete-entry (symbol-name ',entry-name) t)
+	      (beginning-of-line)
+	      (add-text-properties
+	       (point)
+	       (progn
+		 (lsdb-insert-entry (cons ',entry-name form))
+		 (point))
+	       (list 'lsdb-record record)))))))))
+
+(defun lsdb-mode-save ()
+  (interactive)
+  (if (and lsdb-hash-table-is-dirty
+	   (or (interactive-p)
+	       (y-or-n-p "Save the LSDB now?")))
+      (lsdb-save-file lsdb-file lsdb-hash-table)))
+
+;;;_ : Edit Forms -- stolen (and renamed) from gnus-eform.el
+(defvar lsdb-edit-form-buffer "*LSDB edit form*")
+(defvar lsdb-edit-form-done-function nil)
+(defvar lsdb-previous-window-configuration nil)
+
+(defvar lsdb-edit-form-mode-map
+  (let ((keymap (make-sparse-keymap)))
+    (set-keymap-parent keymap emacs-lisp-mode-map)
+    (define-key keymap "\C-c\C-c" 'lsdb-edit-form-done)
+    (define-key keymap "\C-c\C-k" 'lsdb-edit-form-exit)
+    keymap)
+  "Edit form's keymap.")
+
+(defun lsdb-edit-form-mode ()
+  "Major mode for editing forms.
+It is a slightly enhanced emacs-lisp-mode.
+
+\\{lsdb-edit-form-mode-map}"
+  (interactive)
+  (kill-all-local-variables)
+  (setq major-mode 'lsdb-edit-form-mode
+	mode-name "LSDB Edit Form")
+  (use-local-map lsdb-edit-form-mode-map)
+  (make-local-variable 'lsdb-edit-form-done-function)
+  (make-local-variable 'lsdb-previous-window-configuration)
+  (run-hooks 'lsdb-edit-form-mode-hook))
+
+(defun lsdb-edit-form (form documentation exit-func)
+  "Edit FORM in a new buffer.
+Call EXIT-FUNC on exit.  Display DOCUMENTATION in the beginning
+of the buffer."
+  (let ((window-configuration
+	 (current-window-configuration)))
+    (switch-to-buffer (get-buffer-create lsdb-edit-form-buffer))
+    (lsdb-edit-form-mode)
+    (setq lsdb-previous-window-configuration window-configuration
+	  lsdb-edit-form-done-function exit-func)
+    (erase-buffer)
+    (insert documentation)
+    (unless (bolp)
+      (insert "\n"))
+    (goto-char (point-min))
+    (while (not (eobp))
+      (insert ";;; ")
+      (forward-line 1))
+    (insert ";; Type `C-c C-c' after you've finished editing.\n")
+    (insert "\n")
+    (let ((p (point)))
+      (pp form (current-buffer))
+      (insert "\n")
+      (goto-char p))))
+
+(defun lsdb-edit-form-done ()
+  "Update changes and kill the current buffer."
+  (interactive)
+  (goto-char (point-min))
+  (let ((form (condition-case nil
+		  (read (current-buffer))
+		(end-of-file nil)))
+	(func lsdb-edit-form-done-function))
+    (lsdb-edit-form-exit)
+    (funcall func form)))
+
+(defun lsdb-edit-form-exit ()
+  "Kill the current buffer."
+  (interactive)
+  (let ((window-configuration lsdb-previous-window-configuration))
+    (kill-buffer (current-buffer))
+    (set-window-configuration window-configuration)))
+
 ;;;_. Interface to Semi-gnus
 ;;;###autoload
 (defun lsdb-gnus-insinuate ()
   "Call this function to hook LSDB into Semi-gnus."
   (add-hook 'gnus-article-prepare-hook 'lsdb-gnus-update-record)
-  (add-hook 'gnus-save-newsrc-hook 'lsdb-offer-save))
+  (add-hook 'gnus-save-newsrc-hook 'lsdb-mode-save))
 
 (defvar gnus-current-headers)
 (defun lsdb-gnus-update-record ()
@@ -574,7 +784,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   "Call this function to hook LSDB into Wanderlust."
   (add-hook 'wl-message-redisplay-hook 'lsdb-wl-update-record)
   (add-hook 'wl-summary-exit-hook 'lsdb-wl-hide-buffer)
-  (add-hook 'wl-exit-hook 'lsdb-offer-save))
+  (add-hook 'wl-exit-hook 'lsdb-mode-save))
 
 (defun lsdb-wl-update-record ()
   (save-excursion
