@@ -128,7 +128,7 @@ where the last element is optional."
 (defcustom lsdb-display-small-x-face nil
   "If non-nil, downscale the size of X-Face image."
   :group 'lsdb-x-face
-  :type 'float)
+  :type 'boolean)
 
 (defcustom lsdb-uncompface-program (exec-installed-p "uncompface")
   "Name of the uncompface program."
