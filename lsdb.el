@@ -1090,7 +1090,8 @@ It partially emulates the GNU Emacs' of `quit-window'."
   "Show the LSDB window."
   (if (get-buffer lsdb-buffer-name)
       (if lsdb-temp-buffer-show-function
-	  (funcall lsdb-temp-buffer-show-function lsdb-buffer-name)
+	  (let ((lsdb-pop-up-windows t))
+	    (funcall lsdb-temp-buffer-show-function lsdb-buffer-name))
 	(pop-to-buffer lsdb-buffer-name))))
 
 (defun lsdb-toggle-buffer (&optional arg)
