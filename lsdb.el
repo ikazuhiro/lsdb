@@ -61,7 +61,6 @@
 (require 'pces)
 (require 'mime)
 (require 'static)
-(require 'timezone)
 
 ;;;_* USER CUSTOMIZATION VARIABLES:
 (defgroup lsdb nil
@@ -120,8 +119,7 @@ where the last three elements are optional."
     (aka 4 ?,)
     (score -1)
     (x-face -1)
-    (sender -1)
-    (last-date -1))
+    (sender -1))
   "Alist of entry types for presentation.
 The format of elements of this list should be
      (ENTRY SCORE [CLASS READ-ONLY])
@@ -645,7 +643,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (setq lsdb-hash-tables-are-dirty t))
     record))
 
-(defun lsdb-update-records (&optional last-date)
+(defun lsdb-update-records ()
   (lsdb-maybe-load-hash-tables)
   (let (senders recipients interesting alist records bodies entry)
     (save-restriction
@@ -679,8 +677,6 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 			bodies))
 		interesting))
 	(setq alist (cdr alist))))
-    (if last-date
-	(push (cons 'last-date last-date) interesting))
     (if senders
 	(setq records (list (lsdb-update-record (pop senders) interesting))))
     (setq alist (nconc senders recipients))
@@ -731,17 +727,23 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	(lsdb-fit-window-to-buffer window)))))
 
 (defun lsdb-update-records-and-display ()
-  (lsdb-maybe-load-hash-tables)
-  (lsdb-display-record (car (lsdb-update-records))))
+  (let ((records (lsdb-update-records)))
+    (if lsdb-display-records-belong-to-user
+	(if records
+	    (lsdb-display-record (car records))
+	  (lsdb-hide-buffer))
+      (catch 'lsdb-show-record
+	(while records
+	  (if (member user-mail-address (cdr (assq 'net (car records))))
+	      (setq records (cdr records))
+	    (lsdb-display-record (car records))
+	    (throw 'lsdb-show-record t)))
+	(lsdb-hide-buffer)))))
 
 (defun lsdb-display-record (record)
   "Display only one RECORD, then shrink the window as possible."
-  (if (and record
-	   (or lsdb-display-records-belong-to-user
-	       (member user-mail-address (cdr (assq 'net record)))))
-      (let ((temp-buffer-show-function lsdb-temp-buffer-show-function))
-	(lsdb-display-records (list record)))
-    (lsdb-hide-buffer)))
+  (let ((temp-buffer-show-function lsdb-temp-buffer-show-function))
+    (lsdb-display-records (list record))))
 
 (defun lsdb-display-records (records)
   (with-current-buffer (get-buffer-create lsdb-buffer-name)
@@ -808,11 +810,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 ;;;_ : Matching Highlight
 (defvar lsdb-last-highlight-overlay nil)
 
-;;;_. avoid byte-compile warning for migemo
+;;; avoid byte-compile warning for migemo
 (eval-when-compile
-  (condition-case nil
-      (autoload 'migemo-get-pattern "migemo")
-    (error)))
+  (autoload 'migemo-get-pattern "migemo"))
 
 (defun lsdb-complete-name-highlight (start end)
   (make-local-hook 'pre-command-hook)
@@ -1451,11 +1451,6 @@ of the buffer."
     (set-window-configuration window-configuration)))
 
 ;;;_. Interface to Semi-gnus
-(eval-when-compile
-  (condition-case nil
-      (require 'nnheader)
-    (error)))
-
 ;;;###autoload
 (defun lsdb-gnus-insinuate ()
   "Call this function to hook LSDB into Semi-gnus."
@@ -1464,30 +1459,10 @@ of the buffer."
 
 (defvar gnus-article-current-summary)
 (defvar gnus-original-article-buffer)
-(defvar gnus-current-headers)
 (defun lsdb-gnus-update-record ()
   (with-current-buffer (with-current-buffer gnus-article-current-summary
 			 gnus-original-article-buffer)
-    (lsdb-maybe-load-hash-tables)
-    (let* ((sender (lsdb-extract-address-components
-		    (mail-header-from gnus-current-headers)))
-	   (date (mail-header-date gnus-current-headers))
-	   (current-date (format-time-string "%Y%m%d%H:%M:%S"))
-	   (record (lsdb-gethash (car sender) lsdb-hash-table))
-	   (last-date (or (cdr (assq 'last-date record))
-			  current-date))
-	   article-date)
-      (if (or (null record)
-	      (null date)		;Without Date: header?
-	      (and (string-lessp (setq article-date
-				       (timezone-make-date-sortable date))
-				 current-date)
-		   (string-lessp last-date article-date)))
-	  (setq record (car (lsdb-update-records
-			     (or article-date current-date)))))
-      (lsdb-display-record (if (stringp (car record)) ;Record is up to date.
-			       record
-			     (cons (car sender) record))))))
+    (lsdb-update-records-and-display)))
 
 ;;;_. Interface to Wanderlust
 ;;;###autoload
