@@ -1042,7 +1042,7 @@ Modify whole identification by side effect."
   "Delete the entry on the current line."
   (interactive)
   (let ((record (lsdb-current-record))
-	entry)
+	entry-name entry)
     (unless record
       (error "There is nothing to follow here"))
     (setq entry-name (or (lsdb-current-entry)
