@@ -355,11 +355,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 (eval-and-compile
   (condition-case nil
-      (progn
-	;; In XEmacs, hash tables can also be created by the lisp reader
-	;; using structure syntax.
-	(read-from-string "#s(hash-table)")
-	(defalias 'lsdb-read 'read))
+      (and
+       ;; In XEmacs, hash tables can also be created by the lisp reader
+       ;; using structure syntax.
+       (read-from-string "#s(hash-table)")
+       (defalias 'lsdb-read 'read))
     (invalid-read-syntax
      (defun lsdb-read (&optional marker)
        "Read one Lisp expression as text from MARKER, return as Lisp object."
