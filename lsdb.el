@@ -37,7 +37,7 @@
 ;;; (lsdb-wl-insinuate)
 ;;; (add-hook 'wl-draft-mode-hook
 ;;;           (lambda ()
-;;;             (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
+;;;             (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
 
 ;;; Code:
 
