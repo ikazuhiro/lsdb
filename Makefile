@@ -36,7 +36,7 @@ install-package:	package
 ChangeLog: $(filter-out ChangeLog CVS, $(wildcard *))
 	cvs2cl --prune --no-wrap --usermap ./cvs2cl/usermap --gmt --stdout \
 		--ignore '\.tdldb' | \
-	ruby -p -i ./cvs2cl/fmtlog.rb > $@
+	ruby -p ./cvs2cl/fmtlog.rb > $@
 
 .PHONY: clean distclean
 clean:
