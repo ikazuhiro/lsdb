@@ -518,17 +518,16 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	(setq tables (cdr tables))))))
 
 ;;;_. Mail Header Extraction
-(defun lsdb-fetch-field-bodies (regexp)
+(defun lsdb-fetch-fields (regexp)
   (save-excursion
     (goto-char (point-min))
     (let ((case-fold-search t)
 	  field-bodies)
       (while (re-search-forward (concat "^\\(" regexp "\\):[ \t]*")
 				nil t)
-	(push (funcall lsdb-decode-field-body-function
-			     (buffer-substring (point) (std11-field-end))
-			     (match-string 1))
-		    field-bodies))
+	(push (cons (match-string 1)
+		    (buffer-substring (point) (std11-field-end)))
+	      field-bodies))
       (nreverse field-bodies))))
 
 (defun lsdb-canonicalize-spaces-and-dots (string)
@@ -681,25 +680,46 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (save-restriction
       (std11-narrow-to-header)
       (setq senders
-	    (delq nil (mapcar #'lsdb-extract-address-components
-			      (lsdb-fetch-field-bodies
+	    (delq nil (mapcar (lambda (field)
+				(let ((components
+				       (lsdb-extract-address-components
+					(cdr field))))
+				  (if components
+				      (setcar
+				       components
+				       (funcall lsdb-decode-field-body-function
+						(car components) (car field))))
+				  components))
+			      (lsdb-fetch-fields
 			       lsdb-sender-headers)))
 	    recipients
-	    (delq nil (mapcar #'lsdb-extract-address-components
-			      (lsdb-fetch-field-bodies
+	    (delq nil (mapcar (lambda (field)
+				(let ((components
+				       (lsdb-extract-address-components
+					(cdr field))))
+				  (if components
+				      (setcar
+				       components
+				       (funcall lsdb-decode-field-body-function
+						(car components) (car field))))
+				  components))
+			      (lsdb-fetch-fields
 			       lsdb-recipients-headers))))
       (setq alist lsdb-interesting-header-alist)
       (while alist
 	(setq bodies
 	      (delq nil (mapcar
-			 (lambda (field-body)
-			   (if (nth 1 (car alist))
-			       (and (string-match (nth 1 (car alist))
-						  field-body)
-				    (replace-match (nth 3 (car alist))
-						   nil nil field-body))
-			     field-body))
-			 (lsdb-fetch-field-bodies (car (car alist))))))
+			 (lambda (field)
+			   (let ((field-body
+				  (funcall lsdb-decode-field-body-function
+					   (cdr field) (car field))))
+			     (if (nth 1 (car alist))
+				 (and (string-match (nth 1 (car alist))
+						    field-body)
+				      (replace-match (nth 3 (car alist))
+						     nil nil field-body))
+			       field-body)))
+			 (lsdb-fetch-fields (car (car alist))))))
 	(when bodies
 	  (setq entry (or (nth 2 (car alist))
 			  'notes))
