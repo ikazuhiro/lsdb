@@ -1021,41 +1021,41 @@ Modify whole identification by side effect."
 		 (point))
 	       (list 'lsdb-record record)))))))))
 
-(defun lsdb-mode-delete-entry (&optional entry-name dont-update)
+(defun lsdb-mode-delete-entry-1 (entry)
+  "Delete text contents of the ENTRY from the current buffer."
+  (save-restriction
+    (lsdb-narrow-to-record)
+    (let ((case-fold-search t)
+	  (inhibit-read-only t)
+	  buffer-read-only)
+      (goto-char (point-min))
+      (if (re-search-forward
+	   (concat "^\t" (capitalize (symbol-name (car entry))) ":")
+	   nil t)
+	  (delete-region (match-beginning 0)
+			 (if (re-search-forward
+			      "^\t[^\t][^:]+:" nil t)
+			     (match-beginning 0)
+			   (point-max)))))))
+
+(defun lsdb-mode-delete-entry ()
   "Delete the entry on the current line."
   (interactive)
   (let ((record (lsdb-current-record))
 	entry)
     (unless record
       (error "There is nothing to follow here"))
-    (unless entry-name
-      (setq entry-name (or (lsdb-current-entry)
-			   (lsdb-read-entry
-			    record "Which entry to delete: "))))
-    (when (and (setq entry (assq entry-name (cdr record)))
-	       (or (not lsdb-verbose)
+    (setq entry-name (or (lsdb-current-entry)
+			 (lsdb-read-entry record "Which entry to delete: "))
+	  entry (assq entry-name (cdr record)))
+    (when (and entry
+	       (or (not (interactive-p))
+		   (not lsdb-verbose)
 		   (y-or-n-p
 		    (format "Do you really want to delete entry `%s' of `%s'?"
 			    entry-name (car record)))))
-      (unless dont-update
-	(lsdb-delete-entry record entry))
-      (save-restriction
-	(lsdb-narrow-to-record)
-	(let ((case-fold-search t)
-	      (inhibit-read-only t)
-	      buffer-read-only)
-	  (goto-char (point-min))
-	  (if (re-search-forward
-	       (concat "^\t" (capitalize (symbol-name
-					  (or entry-name
-					      (lsdb-current-entry))))
-		       ":")
-	       nil t)
-	      (delete-region (match-beginning 0)
-			     (if (re-search-forward
-				  "^\t[^\t][^:]+:" nil t)
-				 (match-beginning 0)
-			       (point-max)))))))))
+      (lsdb-delete-entry record entry)
+      (lsdb-mode-delete-entry-1 entry))))
 
 (defun lsdb-mode-edit-entry ()
   "Edit the entry on the current line."
@@ -1085,7 +1085,7 @@ Modify whole identification by side effect."
 	      (setcdr entry form)
 	      (run-hook-with-args 'lsdb-update-record-functions record)
 	      (setq lsdb-hash-tables-are-dirty t)
-	      (lsdb-mode-delete-entry ',entry-name t)
+	      (lsdb-mode-delete-entry-1 entry)
 	      (beginning-of-line)
 	      (add-text-properties
 	       (point)
@@ -1101,6 +1101,7 @@ Modify whole identification by side effect."
       (message "(No changes need to be saved)")
     (when (or (interactive-p)
 	      dont-ask
+	      (not lsdb-verbose)
 	      (y-or-n-p "Save the LSDB now? "))
       (lsdb-save-hash-tables)
       (setq lsdb-hash-tables-are-dirty nil)
