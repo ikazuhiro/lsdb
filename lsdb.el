@@ -1465,7 +1465,7 @@ the user wants it."
 (provide 'lsdb)
 
 (product-provide 'lsdb
-  (product-define "LSDB" nil '(0 2)))
+  (product-define "LSDB" nil '(0 4)))
 
 ;;;_* Local emacs vars.
 ;;; The following `outline-layout' local variable setting:
