@@ -59,9 +59,14 @@ If you use Semi-gnus or its variant, put the following lines into your
 (autoload 'lsdb-gnus-insinuate "lsdb")
 (autoload 'lsdb-gnus-insinuate-message "lsdb")
 (add-hook 'gnus-startup-hook 'lsdb-gnus-insinuate)
-(add-hook 'message-setup-hook
-          (lambda ()
-             (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
+
+;; If you are using T-gnus 6.15.7 or later, type M-x
+;; customize-variable and set message-expand-name-function to
+;; lsdb-complete-name, instead of adding the following lines.
+;; (add-hook 'message-setup-hook
+;;           (lambda ()
+;;              (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
+
 (add-hook 'gnus-summary-mode-hook
           (lambda ()
             (define-key gnus-summary-mode-map ":" 'lsdb-toggle-buffer)))
