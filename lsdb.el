@@ -243,7 +243,7 @@ may remhash or puthash the entry currently being processed by FUNCTION."
     (mapatoms
      (lambda (symbol)
        (funcall function (symbol-name symbol) (symbol-value symbol)))
-     hash-table))
+     (nth 1 hash-table)))
   (defun lsdb-hash-table-size (hash-table)
     "Return the size of HASH-TABLE.
 This is the current number of slots in HASH-TABLE, whether occupied or not."
