@@ -338,7 +338,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	    (if coding-system-name
 		(insert ";;; -*- coding: " coding-system-name " -*-\n"))))
       (insert "#s(hash-table size "
-	      (number-to-string (lsdb-hash-table-size hash-table))
+	      ;; reduce the actual size of the close hash table
+	      (number-to-string (lsdb-hash-table-count hash-table))
 	      " test equal data (")
       (lsdb-maphash
        (lambda (key value)
