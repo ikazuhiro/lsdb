@@ -1811,12 +1811,13 @@ the user wants it."
 	 (process-connection-type nil)
 	 (cached (cdr (assq type (lsdb-gethash x-face lsdb-x-face-cache))))
 	 (marker (point-marker))
+	 (buffer (generate-new-buffer " *lsdb work*"))
 	 process)
     (if cached
 	(lsdb-insert-x-face-image cached type marker)
       (setq process
 	    (start-process-shell-command
-	     "lsdb-x-face-command" (generate-new-buffer " *lsdb work*")
+	     "lsdb-x-face-command" buffer
 	     (concat "{ "
 		     (apply #'concat
 			    (lsdb-substitute-variables
@@ -1824,22 +1825,28 @@ the user wants it."
 			     'scale-factor
 			     (number-to-string lsdb-x-face-scale-factor)))
 		     "; } 2> /dev/null")))
-      (process-send-string process (concat x-face "\n"))
-      (process-send-eof process)
+      (set-process-filter
+       process
+       `(lambda (process string)
+	  (save-excursion
+	    (set-buffer ,buffer)
+	    (goto-char (point-max))
+	    (insert string))))
       (set-process-sentinel
        process
        `(lambda (process string)
 	  (unwind-protect
-	      (when (and (buffer-live-p (marker-buffer ,marker))
-			 (equal string "finished\n"))
-		(let ((data
-		       (with-current-buffer (process-buffer process)
-			 (set-buffer-multibyte nil)
-			 (buffer-string))))
-		  (lsdb-insert-x-face-image data ',type ,marker)
-		  (lsdb-puthash ,x-face (list (cons ',type data))
-				lsdb-x-face-cache)))
-	    (kill-buffer (process-buffer process))))))))
+	      (if (equal string "finished\n")
+		  (let ((data
+			 (with-current-buffer ,buffer
+			   (set-buffer-multibyte nil)
+			   (buffer-string))))
+		    (lsdb-insert-x-face-image data ',type ,marker)
+		    (lsdb-puthash ,x-face (list (cons ',type data))
+				  lsdb-x-face-cache)))
+	    (kill-buffer ,buffer))))
+      (process-send-string process (concat x-face "\n"))
+      (process-send-eof process))))
 
 ;;;_. Face Rendering
 (defvar lsdb-face-cache
@@ -1909,12 +1916,13 @@ the user wants it."
 	 (process-connection-type nil)
 	 (cached (cdr (assq type (lsdb-gethash face lsdb-face-cache))))
 	 (marker (point-marker))
+	 (buffer (generate-new-buffer " *lsdb work*"))
 	 process)
     (if cached
 	(lsdb-insert-face-image cached type marker)
       (setq process
 	    (start-process-shell-command
-	     "lsdb-face-command" (generate-new-buffer " *lsdb work*")
+	     "lsdb-face-command" buffer
 	     (concat "{ "
 		     (apply #'concat
 			    (lsdb-substitute-variables
@@ -1922,22 +1930,28 @@ the user wants it."
 			     'scale-factor
 			     (number-to-string lsdb-face-scale-factor)))
 		     "; } 2> /dev/null")))
-      (process-send-string process (base64-decode-string face))
-      (process-send-eof process)
+      (set-process-filter
+       process
+       `(lambda (process string)
+	  (save-excursion
+	    (set-buffer ,buffer)
+	    (goto-char (point-max))
+	    (insert string))))
       (set-process-sentinel
        process
        `(lambda (process string)
 	  (unwind-protect
-	      (when (and (buffer-live-p (marker-buffer ,marker))
-			 (equal string "finished\n"))
-		(let ((data
-		       (with-current-buffer (process-buffer process)
-			 (set-buffer-multibyte nil)
-			 (buffer-string))))
-		  (lsdb-insert-face-image data ',type ,marker)
-		  (lsdb-puthash ,face (list (cons ',type data))
-				lsdb-face-cache)))
-	    (kill-buffer (process-buffer process))))))))
+	      (if (equal string "finished\n")
+		  (let ((data
+			 (with-current-buffer ,buffer
+			   (set-buffer-multibyte nil)
+			   (buffer-string))))
+		    (lsdb-insert-face-image data ',type ,marker)
+		    (lsdb-puthash ,face (list (cons ',type data))
+				  lsdb-face-cache)))
+	    (kill-buffer ,buffer))))
+      (process-send-string process (base64-decode-string face))
+      (process-send-eof process))))
 
 (require 'product)
 (provide 'lsdb)
