@@ -69,6 +69,13 @@ If you use MU-CITE, put the following lines into your ~/.emacs:
 (eval-after-load "mu-cite"
   '(lsdb-mu-insinuate))
 
+If you want to use x-face-e21 instead of the LSDB's builtin X-Face
+functions, set lsdb-insert-x-face-function as follows:
+(setq lsdb-insert-x-face-function
+      (lambda (x-face)
+	(require 'x-face-e21)
+	(insert-image (x-face-create-image x-face :scale-factor 0.5))))
+
 .* Bug reports
 If you found bugs, please drop a note to the EMACS-MIME Mailing List:
 

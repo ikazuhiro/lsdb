@@ -1253,7 +1253,8 @@ the user wants it."
        process
        `(lambda (process string)
 	  (unwind-protect
-	      (when (equal string "finished\n")
+	      (when (and (buffer-live-p (marker-buffer ,marker))
+			 (equal string "finished\n"))
 		(let ((data
 		       (with-current-buffer (process-buffer process)
 			 (set-buffer-multibyte nil)
