@@ -107,20 +107,39 @@ where the last three elements are optional."
   :group 'lsdb
   :type 'list)
 
+(lsdb-define-entry 'net
+		   :type '(list string)
+		   :plist 
+		   
 (defcustom lsdb-entry-type-alist
-  '((net 5 ?,)
-    (creation-date 2 ?. t)
-    (last-modified 3 ?. t)
-    (mailing-list 4 ?,)
-    (attribution 4 ?.)
+  '((net (list string))
+    (creation-date string)
+    (last-modified string)
+    (mailing-list (list string))
+    (attribution string)
+    (organization (list string))
+    (www (list string))
+    (aka (list string))
+    (score integer)
+    (x-face (list string)))
+  "Alist mapping entry names to their types."
+  :group 'lsdb
+  :type 'list)
+
+(defcustom lsdb-entry--alist
+  '((net score 5)
+    (creation-date score 2)
+    (last-modified score 3)
+    (mailing-list 4)
+    (attribution 4)
     (organization 4)
     (www 4)
-    (aka 4 ?,)
+    (aka 4)
     (score -1)
     (x-face -1))
-  "Alist of entry types for presentation.
+  "Alist of entry scores for presentation.
 The format of elements of this list should be
-     (ENTRY SCORE [CLASS READ-ONLY])
+     (ENTRY SCORE TYPE [PROP...])
 where the last two elements are optional.
 Possible values for CLASS are `?.' and '?,'.  If CLASS is `?.', the
 entry takes a unique value which is overridden by newly assigned one
@@ -1390,13 +1409,24 @@ always hide."
 
 ;;;_. Interface to Mew written by Hideyuki SHIRAI <shirai@meadowy.org>
 (eval-when-compile
-  (autoload 'mew-sinfo-get-disp-msg "mew")
-  (autoload 'mew-current-get-fld "mew")
-  (autoload 'mew-current-get-msg "mew")
-  (autoload 'mew-frame-id "mew")
-  (autoload 'mew-cache-hit "mew")
-  (autoload 'mew-xinfo-get-decode-err "mew")
-  (autoload 'mew-xinfo-get-action "mew"))
+  (condition-case nil
+      (progn
+	(require 'mew)
+	;; Avoid macro `mew-cache-hit' expand (Mew 1.94.2 or earlier).
+	;; Changed `mew-cache-hit' from macro to function at Mew 2.0.
+	(if (not (fboundp 'mew-current-get-fld))
+	    (setq byte-compile-macro-environment
+		  (cons '(mew-cache-hit . nil)
+			byte-compile-macro-environment))))
+    (error
+     ;; Silence byte compiler for environments where Mew does not installed.
+     (autoload 'mew-sinfo-get-disp-msg "mew")
+     (autoload 'mew-current-get-fld "mew")
+     (autoload 'mew-current-get-msg "mew")
+     (autoload 'mew-frame-id "mew")
+     (autoload 'mew-cache-hit "mew")
+     (autoload 'mew-xinfo-get-decode-err "mew")
+     (autoload 'mew-xinfo-get-action "mew"))))
 
 ;;;###autoload
 (defun lsdb-mew-insinuate ()
