@@ -38,7 +38,8 @@
   (while bbdb-records
     (when (setq value (bbdb-record-net (car bbdb-records)))
       (lsdb-update-record
-       (list (bbdb-record-name (car bbdb-records))
+       (list (or (bbdb-record-name (car bbdb-records))
+		 (car value))
 	     (car value))
        (nconc
 	(if (cdr value)
