@@ -77,7 +77,8 @@ where the last three elements are optional."
   '((net 3 ?,)
     (creation-date 2)
     (mailing-list 1 ?,)
-    (attribution 1 ?.))
+    (attribution 1 ?.)
+    (organization 1))
   "Alist of entries to display.
 The format of elements of this list should be
      (ENTRY SCORE CLASS)
