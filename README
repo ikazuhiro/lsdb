@@ -118,8 +118,7 @@ Latest version of LSDB can be found at:
  * http://sourceforge.jp/projects/lsdb/files/
 
 .* API
-The API are quite simple but not written in a way that maximizes
-flexibility.
+The API is simple and not written in a way that maximizes flexibility.
 
 .. Record Management
 . : Gathering Records
