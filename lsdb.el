@@ -53,7 +53,7 @@
 ;;;             (define-key mew-draft-header-map "\M-I" 'lsdb-complete-name)))
 ;;; (add-hook 'mew-summary-mode-hook
 ;;;           (lambda ()
-;;;             (define-key mew-summary-mode-map ":" 'lsdb-toggle-buffer)))
+;;;             (define-key mew-summary-mode-map "l" 'lsdb-toggle-buffer)))
 
 ;;; Code:
 
@@ -729,6 +729,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defvar lsdb-last-completion nil)
 (defvar lsdb-last-candidates nil)
 (defvar lsdb-last-candidates-pointer nil)
+(defvar lsdb-complete-marker nil)
 
 ;;;_ : Matching Highlight
 (defvar lsdb-last-highlight-overlay nil)
@@ -747,9 +748,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 		     'underline))))
 
 (defun lsdb-complete-name-highlight-update ()
-  (unless (eq 'this-command 'lsdb-complete-name)
+  (unless (eq this-command 'lsdb-complete-name)
     (if lsdb-last-highlight-overlay
 	(delete-overlay lsdb-last-highlight-overlay))
+    (set-marker lsdb-complete-marker nil)
     (remove-hook 'pre-command-hook
 		 'lsdb-complete-name-highlight-update t)))
 
@@ -758,11 +760,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   "Complete the user full-name or net-address before point"
   (interactive)
   (lsdb-maybe-load-hash-tables)
+  (unless (markerp lsdb-complete-marker)
+    (setq lsdb-complete-marker (make-marker)))
   (let* ((start
-	  (save-excursion
-	    (re-search-backward "\\(\\`\\|[\n:,]\\)[ \t]*")
-	    (goto-char (match-end 0))
-	    (point)))
+	  (or (and (eq (marker-buffer lsdb-complete-marker) (current-buffer))
+		   (marker-position lsdb-complete-marker))
+	      (save-excursion
+		(re-search-backward "\\(\\`\\|[\n:,]\\)[ \t]*")
+		(goto-char (match-end 0))
+		(point))))
 	 pattern
 	 (case-fold-search t)
 	 (completion-ignore-case t))
@@ -933,7 +939,7 @@ Modify whole identification by side effect."
   (let ((end (next-single-property-change (point) 'lsdb-record nil
 					  (point-max))))
     (narrow-to-region
-     (previous-single-property-change (point) 'lsdb-record nil (point-min))
+     (previous-single-property-change end 'lsdb-record nil (point-min))
      end)
     (goto-char (point-min))))
 
