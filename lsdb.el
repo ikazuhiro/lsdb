@@ -485,15 +485,17 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defun lsdb-insert-entry (entry)
   (let ((entry-name (capitalize (symbol-name (car entry)))))
     (intern entry-name lsdb-known-entry-names)
-    (insert "\t" entry-name ": "
-	    (if (listp (cdr entry))
-		(mapconcat
-		 #'identity (cdr entry)
-		 (if (eq ?, (nth 2 (assq (car entry) lsdb-entry-type-alist)))
-		     ", "
-		   "\n\t\t"))
-	      (cdr entry))
-	    "\n")))
+    (if (>= (lsdb-entry-score entry) 0)
+	(insert "\t" entry-name ": "
+		(if (listp (cdr entry))
+		    (mapconcat
+		     #'identity (cdr entry)
+		     (if (eq ?, (nth 2 (assq (car entry)
+					     lsdb-entry-type-alist)))
+			 ", "
+		       "\n\t\t"))
+		  (cdr entry))
+		"\n"))))
 
 (defun lsdb-print-record (record)
   (insert (car record) "\n")
@@ -502,8 +504,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	       (lambda (entry1 entry2)
 		 (> (lsdb-entry-score entry1) (lsdb-entry-score entry2))))))
     (while entries
-      (if (>= (lsdb-entry-score (car entries)) 0)
-	  (lsdb-insert-entry (car entries)))
+      (lsdb-insert-entry (car entries))
       (setq entries (cdr entries)))))
 
 ;;;_. Completion
@@ -679,7 +680,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (lsdb-edit-form
      (cdr entry) "Editing the entry."
      `(lambda (form)
-	(unless (equal form ',entry-name)
+	(unless (equal form ',(cdr entry))
 	  (save-excursion
 	    (set-buffer lsdb-buffer-name)
 	    (goto-char ,marker)
