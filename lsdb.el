@@ -31,6 +31,9 @@
 ;;; (add-hook 'message-setup-hook
 ;;;           (lambda ()
 ;;;             (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
+;;; (add-hook 'gnus-summary-mode-hook
+;;;           (lambda ()
+;;;             (define-key gnus-summary-mode-map ":" 'lsdb-toggle-buffer)))
 
 ;;; For Wanderlust, put the following lines into your ~/.wl:
 ;;; (require 'lsdb)
@@ -38,6 +41,9 @@
 ;;; (add-hook 'wl-draft-mode-hook
 ;;;           (lambda ()
 ;;;             (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
+;;; (add-hook 'wl-summary-mode-hook
+;;;           (lambda ()
+;;;             (define-key wl-summary-mode-map ":" 'lsdb-toggle-buffer)))
 
 ;;; For Mew, put the following lines into your ~/.mew:
 ;;; (autoload 'lsdb-mew-insinuate "lsdb")
@@ -45,6 +51,9 @@
 ;;; (add-hook 'mew-draft-mode-hook
 ;;;           (lambda ()
 ;;;             (define-key mew-draft-header-map "\M-I" 'lsdb-complete-name)))
+;;; (add-hook 'mew-summary-mode-hook
+;;;           (lambda ()
+;;;             (define-key mew-summary-mode-map ":" 'lsdb-toggle-buffer)))
 
 ;;; Code:
 
@@ -189,14 +198,6 @@ The compressed face will be piped to this command."
   :group 'lsdb
   :type 'function)
 
-(defcustom lsdb-temp-buffer-show-function
-  #'lsdb-temp-buffer-show-function
-  "Non-nil means call as function to display a help buffer.
-The function is called with one argument, the buffer to be displayed.
-Overrides `temp-buffer-show-function'."
-  :group 'lsdb
-  :type 'function)
-
 (defcustom lsdb-pop-up-windows t
   "Non-nil means LSDB should make new windows to display records."
   :group 'lsdb
@@ -274,6 +275,12 @@ It represents address to full-name mapping.")
 (defvar lsdb-known-entry-names
   (make-vector 29 0)
   "An obarray used to complete an entry name.")
+
+(defvar lsdb-temp-buffer-show-function
+  #'lsdb-temp-buffer-show-function
+  "Non-nil means call as function to display a help buffer.
+The function is called with one argument, the buffer to be displayed.
+Overrides `temp-buffer-show-function'.")
 
 ;;;_. Hash Table Emulation
 (if (and (fboundp 'make-hash-table)
@@ -653,13 +660,14 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (set-window-start window (point-min)))))
 
 (defun lsdb-temp-buffer-show-function (buffer)
-  (save-selected-window
-    (let ((window (or (get-buffer-window lsdb-buffer-name)
-		      (progn
-			(select-window (get-largest-window))
-			(split-window-vertically)))))
-      (set-window-buffer window buffer)
-      (lsdb-fit-window-to-buffer window))))
+  (when lsdb-pop-up-windows
+    (save-selected-window
+      (let ((window (or (get-buffer-window lsdb-buffer-name)
+			(progn
+			  (select-window (get-largest-window))
+			  (split-window-vertically)))))
+	(set-window-buffer window buffer)
+	(lsdb-fit-window-to-buffer window)))))
 
 (defun lsdb-display-record (record)
   "Display only one RECORD, then shrink the window as possible."
@@ -1072,19 +1080,38 @@ It partially emulates the GNU Emacs' of `quit-window'."
 	(kill-buffer buffer)
       (bury-buffer buffer))))
 
-(defun lsdb-mode-hide-buffer ()
+(defun lsdb-hide-buffer ()
   "Hide the LSDB window."
   (let ((window (get-buffer-window lsdb-buffer-name)))
     (if window
 	(lsdb-mode-quit-window nil window))))
 
-(defun lsdb-mode-show-buffer ()
+(defun lsdb-show-buffer ()
   "Show the LSDB window."
   (if (get-buffer lsdb-buffer-name)
       (if lsdb-temp-buffer-show-function
-	  (pop-to-buffer (get-buffer lsdb-buffer-name))
-	(funcall lsdb-temp-buffer-show-function
-		 (get-buffer lsdb-buffer-name)))))
+	  (funcall lsdb-temp-buffer-show-function lsdb-buffer-name)
+	(pop-to-buffer lsdb-buffer-name))))
+
+(defun lsdb-toggle-buffer (&optional arg)
+  "Toggle hiding of the LSDB window.
+If given a negative prefix, always show; if given a positive prefix,
+always hide."
+  (interactive
+   (list (if current-prefix-arg
+	     (prefix-numeric-value current-prefix-arg)
+	   0)))
+  (unless arg				;called noninteractively?
+    (setq arg 0))
+  (cond
+   ((or (< arg 0)
+	(and (zerop arg)
+	     (not (get-buffer-window lsdb-buffer-name))))
+    (lsdb-show-buffer))
+   ((or (> arg 0)
+	(and (zerop arg)
+	     (get-buffer-window lsdb-buffer-name)))
+    (lsdb-hide-buffer))))
 
 (defun lsdb-lookup-records (regexp &optional entry-name)
   "Return the all records in the LSDB matching the REGEXP.
@@ -1249,7 +1276,7 @@ of the buffer."
       (buffer-disable-undo)
       (mime-insert-entity entity)
       (setq records (lsdb-update-records))
-      (when (and records lsdb-pop-up-windows)
+      (when records
 	(lsdb-display-record (car records))))))
 
 ;;;_. Interface to Wanderlust
@@ -1257,12 +1284,12 @@ of the buffer."
 (defun lsdb-wl-insinuate ()
   "Call this function to hook LSDB into Wanderlust."
   (add-hook 'wl-message-redisplay-hook 'lsdb-wl-update-record)
-  (add-hook 'wl-summary-exit-hook 'lsdb-mode-hide-buffer)
-  (add-hook 'wl-summary-toggle-disp-off-hook 'lsdb-mode-hide-buffer)
-  (add-hook 'wl-summary-toggle-disp-folder-on-hook 'lsdb-mode-hide-buffer)
-  (add-hook 'wl-summary-toggle-disp-folder-off-hook 'lsdb-mode-hide-buffer)
+  (add-hook 'wl-summary-exit-hook 'lsdb-hide-buffer)
+  (add-hook 'wl-summary-toggle-disp-off-hook 'lsdb-hide-buffer)
+  (add-hook 'wl-summary-toggle-disp-folder-on-hook 'lsdb-hide-buffer)
+  (add-hook 'wl-summary-toggle-disp-folder-off-hook 'lsdb-hide-buffer)
   (add-hook 'wl-summary-toggle-disp-folder-message-resumed-hook
-	    'lsdb-mode-show-buffer)
+	    'lsdb-show-buffer)
   (add-hook 'wl-exit-hook 'lsdb-mode-save)
   (add-hook 'wl-save-hook 'lsdb-mode-save))
 
@@ -1272,7 +1299,7 @@ of the buffer."
   (save-excursion
     (set-buffer (wl-message-get-original-buffer))
     (let ((records (lsdb-update-records)))
-      (when (and records lsdb-pop-up-windows)
+      (when records
 	(let ((lsdb-temp-buffer-show-function
 	       #'lsdb-wl-temp-buffer-show-function))
 	  (lsdb-display-record (car records)))))))
@@ -1280,18 +1307,19 @@ of the buffer."
 (defvar wl-current-summary-buffer)
 (defvar wl-message-buffer)
 (defun lsdb-wl-temp-buffer-show-function (buffer)
-  (save-selected-window
-    (let ((window (or (get-buffer-window lsdb-buffer-name)
-		      (progn
-			(select-window 
-			 (or (save-excursion
-			       (if (buffer-live-p wl-current-summary-buffer)
-				   (set-buffer wl-current-summary-buffer))
-			       (get-buffer-window wl-message-buffer))
-			     (get-largest-window)))
-			(split-window-vertically)))))
-      (set-window-buffer window buffer)
-      (lsdb-fit-window-to-buffer window))))
+  (when lsdb-pop-up-windows
+    (save-selected-window
+      (let ((window (or (get-buffer-window lsdb-buffer-name)
+			(progn
+			  (select-window 
+			   (or (save-excursion
+				 (if (buffer-live-p wl-current-summary-buffer)
+				     (set-buffer wl-current-summary-buffer))
+				 (get-buffer-window wl-message-buffer))
+			       (get-largest-window)))
+			  (split-window-vertically)))))
+	(set-window-buffer window buffer)
+	(lsdb-fit-window-to-buffer window)))))
 
 ;;;_. Interface to Mew written by Hideyuki SHIRAI <shirai@rdmg.mgcs.mei.co.jp>
 (eval-when-compile
@@ -1308,8 +1336,8 @@ of the buffer."
   (add-hook 'mew-summary-toggle-disp-msg-hook
 	    (lambda ()
 	      (unless (mew-sinfo-get-disp-msg)
-		(lsdb-mode-hide-buffer))))
-  (add-hook 'mew-suspend-hook 'lsdb-mode-hide-buffer)
+		(lsdb-hide-buffer))))
+  (add-hook 'mew-suspend-hook 'lsdb-hide-buffer)
   (add-hook 'mew-quit-hook 'lsdb-mode-save)
   (add-hook 'kill-emacs-hook 'lsdb-mode-save))
 
@@ -1325,8 +1353,7 @@ of the buffer."
 	    (lambda (body name)
 	      (set-text-properties 0 (length body) nil body)
 	      body))
-      (when (and (setq records (lsdb-update-records))
-		 lsdb-pop-up-windows)
+      (when (setq records (lsdb-update-records))
 	(lsdb-display-record (car records))))))
 
 ;;;_. Interface to MU-CITE
