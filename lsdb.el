@@ -379,9 +379,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (let ((components (std11-extract-address-components string)))
     (if (nth 1 components)
 	(if (car components)
-	    (list (nth 1 components)
-		  (funcall lsdb-canonicalize-full-name-function
-			   (car components)))
+	    (list (funcall lsdb-canonicalize-full-name-function
+			   (car components))
+		  (nth 1 components))
 	  (list (nth 1 components) (nth 1 components))))))
 
 ;; stolen (and renamed) from nnheader.el
@@ -406,8 +406,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (setq lsdb-hash-table (lsdb-make-hash-table :test 'equal)))))
 
 (defun lsdb-update-record (sender &optional interesting)
-  (let ((old (lsdb-gethash (nth 1 sender) lsdb-hash-table))
-	(new (cons (cons 'net (list (car sender)))
+  (let ((old (lsdb-gethash (car sender) lsdb-hash-table))
+	(new (cons (cons 'net (list (nth 1 sender)))
 		   interesting))
 	merged
 	record)
@@ -415,7 +415,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (setq new (cons (cons 'creation-date (format-time-string "%Y-%m-%d"))
 		      new)))
     (setq merged (lsdb-merge-record-entries old new)
-	  record (cons (nth 1 sender) merged))
+	  record (cons (car sender) merged))
     (unless (equal merged old)
       (let ((entry (assq 'last-modified (cdr record)))
 	    (last-modified (format-time-string "%Y-%m-%d")))
@@ -1229,11 +1229,15 @@ the user wants it."
 	       x-face)
       (goto-char (point-min))
       (end-of-line)
-      (put-text-property 0 1 'invisible t delimiter)
-      (put-text-property 0 (length delimiter) 'lsdb-record record delimiter)
-      (insert delimiter)
-      (while x-face
-	(funcall lsdb-insert-x-face-function (pop x-face))))))
+      (put-text-property 0 1 'invisible t delimiter) ;hide "\r"
+      (put-text-property
+       (point)
+       (progn
+	 (insert delimiter)
+	 (while x-face
+	   (funcall lsdb-insert-x-face-function (pop x-face)))
+	 (point))
+       'lsdb-record record))))
 
 (defun lsdb-insert-x-face-image (data type marker)
   (static-if (featurep 'xemacs)
