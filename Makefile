@@ -37,6 +37,9 @@ ChangeLog:
 	cvs2cl --prune --no-wrap --usermap ./cvs2cl/usermap --gmt --stdout | \
 	ruby -p -i ./cvs2cl/fmtlog.rb > $@
 
-.PHONY: clean
+.PHONY: clean distclean
 clean:
 	-$(RM) $(GOMI)
+
+distclean:
+	-$(RM) ChangeLog
