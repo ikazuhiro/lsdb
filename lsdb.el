@@ -91,7 +91,7 @@
   :type 'list)
 
 (defcustom lsdb-interesting-header-alist
-  '(("Organization" nil organization)
+  `(("Organization" nil organization)
     ("\\(X-\\)?User-Agent\\|X-Mailer\\|X-Newsreader" nil user-agent)
     ("\\(X-\\)?ML-Name" nil mailing-list)
     ("List-Id" "\\(.*\\)[ \t]+<[^>]+>\\'" mailing-list "\\1")
@@ -99,7 +99,8 @@
     ("Delivered-To" "mailing list[ \t]+\\([^@]+\\)@.*" mailing-list "\\1")
     ("\\(X-URL\\|X-URI\\)" nil www)
     ("X-Attribution\\|X-cite-me" nil attribution)
-    ("X-Face" nil x-face))
+    ("X-Face" nil x-face)
+    (,lsdb-sender-headers nil sender))
   "Alist of headers we are interested in.
 The format of elements of this list should be
      (FIELD-NAME REGEXP ENTRY STRING)
@@ -117,7 +118,8 @@ where the last three elements are optional."
     (www 4)
     (aka 4 ?,)
     (score -1)
-    (x-face -1))
+    (x-face -1)
+    (sender -1))
   "Alist of entry types for presentation.
 The format of elements of this list should be
      (ENTRY SCORE [CLASS READ-ONLY])
@@ -464,7 +466,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 		       (symbol-name (coding-system-name
 				     lsdb-file-coding-system))))))
 	    (if coding-system-name
-		(insert ";;; -*- coding: " coding-system-name " -*-\n"))))
+		(insert ";;; -*- mode: emacs-lisp; coding: "
+			coding-system-name " -*-\n"))))
       (lsdb-insert-hash-table lsdb-hash-table)
       ;; Save the secondary hash tables following.
       (setq tables lsdb-secondary-hash-tables)
@@ -526,14 +529,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (while tables
       (when (or force (not (symbol-value (car tables))))
 	(set (car tables) (lsdb-make-hash-table :test 'equal))
-	(lsdb-maphash
-	 (lambda (key value)
-	   (run-hook-with-args
-	    'lsdb-update-record-functions
-	    (cons key value)))
-	 lsdb-hash-table)
 	(setq lsdb-hash-tables-are-dirty t))
-      (setq tables (cdr tables)))))
+      (setq tables (cdr tables))))
+  (if lsdb-hash-tables-are-dirty
+      (lsdb-maphash
+       (lambda (key value)
+	 (run-hook-with-args
+	  'lsdb-update-record-functions
+	  (cons key value)))
+       lsdb-hash-table)))
 
 (defun lsdb-maybe-load-hash-tables ()
   (unless lsdb-hash-table
@@ -840,19 +844,14 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	    pattern (concat "\\<" (regexp-quote lsdb-last-completion)))
       (lsdb-maphash
        (lambda (key value)
-	 (let ((net (cdr (assq 'net value))))
-	   (if (string-match pattern key)
-	       (setq lsdb-last-candidates
-		     (nconc lsdb-last-candidates
-			    (mapcar (lambda (address)
-				      (if (equal key address)
-					  key
-					(concat key " <" address ">")))
-				    net)))
-	     (while net
-	       (if (string-match pattern (car net))
-		   (push (car net) lsdb-last-candidates))
-	       (setq net (cdr net))))))
+	 (setq lsdb-last-candidates
+	       (nconc lsdb-last-candidates
+		      (delq nil (mapcar
+				 (lambda (candidate)
+				   (if (string-match pattern candidate)
+				       candidate))
+				 (append (cdr (assq 'net value))
+					 (cdr (assq 'sender value))))))))
        lsdb-hash-table)
       ;; Sort candidates by the position where the pattern occurred.
       (setq lsdb-last-candidates
@@ -1746,16 +1745,16 @@ the user wants it."
 (provide 'lsdb)
 
 (product-provide 'lsdb
-  (product-define "LSDB" nil '(0 9)))
+  (product-define "LSDB" nil '(0 10)))
 
 ;;;_* Local emacs vars.
-;;; The following `outline-layout' local variable setting:
+;;; The following `allout-layout' local variable setting:
 ;;;  - closes all topics from the first topic to just before the third-to-last,
 ;;;  - shows the children of the third to last (config vars)
 ;;;  - and the second to last (code section),
 ;;;  - and closes the last topic (this local-variables section).
 ;;;Local variables:
-;;;outline-layout: (0 : -1 -1 0)
+;;;allout-layout: (0 : -1 -1 0)
 ;;;End:
 
 ;;; lsdb.el ends here
