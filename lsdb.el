@@ -105,7 +105,8 @@ where the last three elements are optional."
     (mailing-list 4 ?,)
     (attribution 4 ?.)
     (organization 4)
-    (www 1)
+    (www 4)
+    (aka 4)
     (score -1)
     (x-face -1))
   "Alist of entry types for presentation.
@@ -227,11 +228,15 @@ Bourne shell or its equivalent \(not tcsh) is needed for \"2>\"."
 (defvar lsdb-hash-table nil
   "Internal hash table to hold LSDB records.")
 
+(defvar lsdb-reverse-hash-table nil
+  "The reverse lookup table for `lsdb-hash-table'.
+It represents address to full-name mapping.")
+
 (defvar lsdb-buffer-name "*LSDB*"
   "Buffer name to display LSDB record.")
 
-(defvar lsdb-hash-table-is-dirty nil
-  "Flag to indicate whether the hash table needs to be saved.")
+(defvar lsdb-hash-tables-are-dirty nil
+  "Flag to indicate whether the internal hash tables need to be saved.")
 
 (defvar lsdb-known-entry-names
   (make-vector 29 0)
@@ -296,44 +301,78 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (list 0 (make-vector (or (plist-get args :size) 29) 0))))
 
 ;;;_. Hash Table Reader/Writer
+(defconst lsdb-secondary-hash-table-start-format
+  ";;; %S\n")
+
+(defmacro lsdb-secondary-hash-table-start (hash-table)
+  `(format lsdb-secondary-hash-table-start-format ',hash-table))
+
 (eval-and-compile
   (condition-case nil
       (progn
 	;; In XEmacs, hash tables can also be created by the lisp reader
 	;; using structure syntax.
 	(read-from-string "#s(hash-table)")
-	(defun lsdb-load-file (file)
-	  "Read the contents of FILE into a hash table."
-	  (let ((buffer (find-file-noselect file)))
-	    (unwind-protect
-		(save-excursion
-		  (set-buffer buffer)
-		  (re-search-forward "^#s")
-		  (beginning-of-line)
-		  (read (point-min-marker)))
-	      (kill-buffer buffer)))))
+	(defalias 'lsdb-read 'read))
     (invalid-read-syntax
-    (defun lsdb-load-file (file)
-      "Read the contents of FILE into a hash table."
-      (let* ((plist
-	      (with-temp-buffer
-		(insert-file-contents file)
-		(save-excursion
-		  (re-search-forward "^#s")
-		  (replace-match "")
-		  (beginning-of-line)
-		  (cdr (read (point-marker))))))
-	     (size (plist-get plist 'size))
-	     (data (plist-get plist 'data))
-	     (hash-table (lsdb-make-hash-table :size size :test 'equal)))
-	(while data
-	  (lsdb-puthash (pop data) (pop data) hash-table))
-	hash-table)))))
+     (defun lsdb-read (&optional marker)
+       "Read one Lisp expression as text from MARKER, return as Lisp object."
+       (save-excursion
+	 (goto-char marker)
+	 (if (looking-at "^#s(")
+	     (with-temp-buffer
+	       (buffer-disable-undo)
+	       (insert-buffer-substring (marker-buffer marker) marker)
+	       (goto-char (point-min))
+	       (delete-char 2)
+	       (let ((object (read (current-buffer)))
+		     hash-table data)
+		 (if (eq 'hash-table (car object))
+		     (progn
+		       (setq hash-table
+			     (lsdb-make-hash-table
+			      :size (plist-get (cdr object) 'size)
+			      :test 'equal)
+			     data (plist-get (cdr object) 'data))
+		       (while data
+			 (lsdb-puthash (pop data) (pop data) hash-table))
+		       hash-table)
+		   object)))))))))
 
-(defun lsdb-save-file (file hash-table)
-  "Write the entries within HASH-TABLE into FILE."
+(defun lsdb-load-hash-tables ()
+  "Read the contents of `lsdb-file' into the internal hash tables."
+  (let ((buffer (find-file-noselect lsdb-file)))
+    (unwind-protect
+	(save-excursion
+	  (set-buffer buffer)
+	  (goto-char (point-min))
+	  (re-search-forward "^#s(")
+	  (goto-char (match-beginning 0))
+	  (setq lsdb-hash-table (lsdb-read (point-marker)))
+	  (if (re-search-forward
+	       (concat "^" (lsdb-secondary-hash-table-start
+			    lsdb-reverse-hash-table))
+	       nil t)
+	      (setq lsdb-reverse-hash-table (lsdb-read (point-marker)))))
+      (kill-buffer buffer))))
+
+(defun lsdb-insert-hash-table (hash-table)
+  (insert "#s(hash-table size "
+	  ;; Reduce the actual size of the close hash table, because
+	  ;; XEmacs doesn't have a distinction between index-size and
+	  ;; hash-table-size.
+	  (number-to-string (lsdb-hash-table-count hash-table))
+	  " test equal data (")
+  (lsdb-maphash
+   (lambda (key value)
+     (insert (prin1-to-string key) " " (prin1-to-string value) " "))
+   hash-table)
+  (insert "))"))
+
+(defun lsdb-save-hash-tables ()
+  "Write the records within the internal hash tables into `lsdb-file'."
   (let ((coding-system-for-write lsdb-file-coding-system))
-    (with-temp-file file
+    (with-temp-file lsdb-file
       (if (and (or (featurep 'mule)
 		   (featurep 'file-coding))
 	       lsdb-file-coding-system)
@@ -346,15 +385,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 				     lsdb-file-coding-system))))))
 	    (if coding-system-name
 		(insert ";;; -*- coding: " coding-system-name " -*-\n"))))
-      (insert "#s(hash-table size "
-	      ;; reduce the actual size of the close hash table
-	      (number-to-string (lsdb-hash-table-count hash-table))
-	      " test equal data (")
-      (lsdb-maphash
-       (lambda (key value)
-	 (insert (prin1-to-string key) " " (prin1-to-string value) " "))
-       hash-table)
-      (insert "))"))))
+      (lsdb-insert-hash-table lsdb-hash-table)
+      (insert "\n" (lsdb-secondary-hash-table-start
+		    lsdb-reverse-hash-table))
+      (lsdb-insert-hash-table lsdb-reverse-hash-table))))
 
 ;;;_. Mail Header Extraction
 (defun lsdb-fetch-field-bodies (regexp)
@@ -399,18 +433,39 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (set-buffer-multibyte multibyte))))
 
 ;;;_. Record Management
-(defun lsdb-maybe-load-file ()
+(defun lsdb-maybe-build-reverse-hash-table ()
+  (unless lsdb-reverse-hash-table
+    (setq lsdb-reverse-hash-table (lsdb-make-hash-table :test 'equal))
+    (lsdb-maphash
+     (lambda (key value)
+       (let ((net (cdr (assq 'net value))))
+	 (while net
+	   (lsdb-puthash (pop net) key lsdb-reverse-hash-table))))
+     lsdb-hash-table))
+  (setq lsdb-hash-tables-are-dirty t))
+
+(defun lsdb-maybe-load-hash-tables ()
   (unless lsdb-hash-table
     (if (file-exists-p lsdb-file)
-	(setq lsdb-hash-table (lsdb-load-file lsdb-file))
-      (setq lsdb-hash-table (lsdb-make-hash-table :test 'equal)))))
+	(lsdb-load-hash-tables)
+      (setq lsdb-hash-table (lsdb-make-hash-table :test 'equal)))
+    (lsdb-maybe-build-reverse-hash-table)))
 
 (defun lsdb-update-record (sender &optional interesting)
   (let ((old (lsdb-gethash (car sender) lsdb-hash-table))
 	(new (cons (cons 'net (list (nth 1 sender)))
 		   interesting))
 	merged
-	record)
+	record
+	full-name)
+    ;; Look for the existing record from the reverse hash table.
+    ;; If it is found, regsiter the current full-name as AKA.
+    (unless old
+      (setq full-name (lsdb-gethash (nth 1 sender) lsdb-reverse-hash-table))
+      (when full-name
+	(setq old (lsdb-gethash full-name lsdb-hash-table)
+	      new (cons (list 'aka (car sender)) new))
+	(setcar sender full-name)))
     (unless old
       (setq new (cons (cons 'creation-date (format-time-string "%Y-%m-%d"))
 		      new)))
@@ -425,11 +480,12 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 			       (cdr record)))))
       (lsdb-puthash (car record) (cdr record)
 		    lsdb-hash-table)
-      (setq lsdb-hash-table-is-dirty t))
+      (setq lsdb-hash-tables-are-dirty t))
+    (lsdb-puthash (nth 1 sender) (car sender) lsdb-reverse-hash-table)
     record))
 
 (defun lsdb-update-records ()
-  (lsdb-maybe-load-file)
+  (lsdb-maybe-load-hash-tables)
   (let (senders recipients interesting alist records bodies entry)
     (save-restriction
       (std11-narrow-to-header)
@@ -567,7 +623,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defun lsdb-complete-name ()
   "Complete the user full-name or net-address before point"
   (interactive)
-  (lsdb-maybe-load-file)
+  (lsdb-maybe-load-hash-tables)
   (let* ((start
 	  (save-excursion
 	    (re-search-backward "\\(\\`\\|[\n:,]\\)[ \t]*")
@@ -794,7 +850,7 @@ the current record."
 	      (setcdr record (cons (cons ',entry-name form) (cdr record)))
 	      (lsdb-puthash (car record) (cdr record)
 			    lsdb-hash-table)
-	      (setq lsdb-hash-table-is-dirty t)
+	      (setq lsdb-hash-tables-are-dirty t)
 	      (beginning-of-line 2)
 	      (add-text-properties
 	       (point)
@@ -816,7 +872,7 @@ the current record."
       (setcdr record (delq entry (cdr record)))
       (lsdb-puthash (car record) (cdr record)
 		    lsdb-hash-table)
-      (setq lsdb-hash-table-is-dirty t))
+      (setq lsdb-hash-tables-are-dirty t))
     (save-restriction
       (lsdb-narrow-to-record)
       (let ((case-fold-search t)
@@ -853,7 +909,7 @@ the current record."
 		   (inhibit-read-only t)
 		   buffer-read-only)
 	      (setcdr entry form)
-	      (setq lsdb-hash-table-is-dirty t)
+	      (setq lsdb-hash-tables-are-dirty t)
 	      (lsdb-mode-delete-entry (symbol-name ',entry-name) t)
 	      (beginning-of-line)
 	      (add-text-properties
@@ -866,13 +922,13 @@ the current record."
 (defun lsdb-mode-save (&optional dont-ask)
   "Save LSDB hash table into `lsdb-file'."
   (interactive)
-  (if (not lsdb-hash-table-is-dirty)
+  (if (not lsdb-hash-tables-are-dirty)
       (message "(No changes need to be saved)")
     (when (or (interactive-p)
 	      dont-ask
 	      (y-or-n-p "Save the LSDB now?"))
-      (lsdb-save-file lsdb-file lsdb-hash-table)
-      (setq lsdb-hash-table-is-dirty nil)
+      (lsdb-save-hash-tables)
+      (setq lsdb-hash-tables-are-dirty nil)
       (message "The LSDB was saved successfully."))))
 
 (defun lsdb-mode-quit-window (&optional kill window)
@@ -941,7 +997,7 @@ performed against the entry field."
 	 "Search records regexp: ")
        nil nil nil 'lsdb-mode-lookup-history)
       entry-name)))
-  (lsdb-maybe-load-file)
+  (lsdb-maybe-load-hash-tables)
   (let ((records (lsdb-lookup-records regexp entry-name)))
     (if records
 	(lsdb-display-records records))))
@@ -1139,7 +1195,7 @@ of the buffer."
 				    (cdr (car records))))
 	(lsdb-puthash (car (car records)) (cdr (car records))
 		      lsdb-hash-table)
-	(setq lsdb-hash-table-is-dirty t)))))
+	(setq lsdb-hash-tables-are-dirty t)))))
 
 (defun lsdb-mu-get-prefix-method ()
   "A mu-cite method to return a prefix from LSDB or \">\".
