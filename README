@@ -125,23 +125,25 @@ flexibility.
 . : Gathering Records
 .  , lsdb-update-records<f>
 lsdb-update-records<f> is called from the buffer which contains raw
-contents of MIME entity.  Once it is called, it returns a list of
-records which could be gathered from the buffer.
+contents of MIME entity.  It returns a list of records gathered from
+the buffer.
 
 . : Display Records
 .  , lsdb-display-record<f>
-lsdb-display-record<f> takes only one record, pops up a window, and
-displays the formatted contents of the record within the window.
-If you want to multiple records such as search results at the same
-time, use lsdb-display-records<f> instead.
+lsdb-display-record<f> displays the formatted contents of the record
+within the popup window.  If you want to display multiple records, use
+lsdb-display-records<f> instead.
 
 .. Internal Data Model
 . : Primary Hash Table
-lsdb-hash-table is the variable which holds all the records in LSDB.
-You can operate on this variable in similar fashion to CL's
-hash-table: lsdb-puthash for puthash, lsdb-gethash to gethash,
-lsdh-maphash to maphash are available to you.  For example, you can
-write the following expression to get the record for "Daiki Ueno":
+There are two kinds of hash tables used in LSDB: a primary hash table
+and secondary hash tables.  lsdb-hash-table is the primary hash table
+which holds mappings for names and record objects.  You can operate on
+LSDB hash tables in similar fashion to CL's hash-table API:
+lsdb-puthash (for puthash), lsdb-gethash (for gethash), and
+lsdb-maphash (for maphash) are available.
+
+Here is an example to get the record object for "Daiki Ueno":
 
   (lsdb-gethash "Daiki Ueno" lsdb-hash-table)
   
@@ -156,15 +158,14 @@ write the following expression to get the record for "Daiki Ueno":
 
 . : Secondary Hash Tables
 LSDB can also have one or more secondary hash tables.  These hash
-tables are mainly used to hint lsdb-hash-table to gather additional
-relationship information between record name and entries.  For
-example, lsdb-address-cache is a kind of secondary hash table which
-maintains the mapping of mail addresses to record names.
+tables are mainly used to define additional relationships between
+record objects and their entries.  For example, lsdb-address-cache is
+one of secondary hash table which maintains mappings of mail addresses
+to record names.
 
-The variable lsdb-secondary-hash-tables holds a list where each
-element is corresponding to the name of global variable such as
-lsdb-address-cache.  When the primary hash table is loaded or saved,
-the secondary hash tables will be handled automatically.
+The variable lsdb-secondary-hash-tables is a list of symbols for
+_maintained_ secondary hash tables.  When the primary hash table is
+loaded or saved, these hash tables are updated automatically.
 
 .  , Operate on Secondary Hash Tables
 You will need to follow the manner of the LSDB hooks.
