@@ -579,11 +579,17 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
    (next-single-property-change (point) 'lsdb-record nil (point-max)))
   (goto-char (point-min)))
 
+(defun lsdb-current-record ()
+  (let ((record (get-text-property (point) 'lsdb-record)))
+    (unless record
+      (error "There is nothing to follow here"))
+    record))
+
 (defun lsdb-current-entry ()
   (save-excursion
     (beginning-of-line)
     (if (looking-at "^[^\t]")
-	(let ((record (get-text-property (point) 'lsdb-record))
+	(let ((record (lsdb-current-record))
 	      (completion-ignore-case t))
 	  (completing-read
 	   "Which entry to modify: "
@@ -602,7 +608,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (beginning-of-line)
   (unless (symbolp entry-name)
     (setq entry-name (intern (downcase entry-name))))
-  (when (assq entry-name (cdr (get-text-property (point) 'lsdb-record)))
+  (when (assq entry-name (cdr (lsdb-current-record)))
     (error "The entry already exists"))
   (let ((marker (point-marker)))
     (lsdb-edit-form
@@ -612,9 +618,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  (save-excursion
 	    (set-buffer lsdb-buffer-name)
 	    (goto-char ,marker)
-	    (let* ((record (get-text-property (point) 'lsdb-record))
-		   (inhibit-read-only t)
-		   buffer-read-only)
+	    (let ((record (lsdb-current-record))
+		  (inhibit-read-only t)
+		  buffer-read-only)
 	      (setcdr record (cons (cons ',entry-name form) (cdr record)))
 	      (lsdb-puthash (car record) (cdr record)
 			    lsdb-hash-table)
@@ -630,7 +636,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defun lsdb-mode-delete-entry (&optional entry-name dont-update)
   "Delete the entry on the current line."
   (interactive)
-  (let ((record (get-text-property (point) 'lsdb-record))
+  (let ((record (lsdb-current-record))
 	entry)
     (or entry-name
 	(setq entry-name (lsdb-current-entry)))
@@ -661,7 +667,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defun lsdb-mode-edit-entry ()
   "Edit the entry on the current line."
   (interactive)
-  (let* ((record (get-text-property (point) 'lsdb-record))
+  (let* ((record (lsdb-current-record))
 	 (entry-name (intern (downcase (lsdb-current-entry))))
 	 (entry (assq entry-name (cdr record)))
 	 (marker (point-marker)))
@@ -672,7 +678,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  (save-excursion
 	    (set-buffer lsdb-buffer-name)
 	    (goto-char ,marker)
-	    (let* ((record (get-text-property (point) 'lsdb-record))
+	    (let* ((record (lsdb-current-record))
 		   (entry (assq ',entry-name (cdr record)))
 		   (inhibit-read-only t)
 		   buffer-read-only)
