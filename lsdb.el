@@ -39,6 +39,13 @@
 ;;;           (lambda ()
 ;;;             (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
 
+;;; For Mew, put the following lines into your ~/.mew:
+;;; (autoload 'lsdb-mew-insinuate "lsdb")
+;;; (add-hook 'mew-init-hook 'lsdb-mew-insinuate)
+;;; (add-hook 'mew-draft-mode-hook
+;;;           (lambda ()
+;;;             (define-key mew-draft-header-map "\M-I" 'lsdb-complete-name)))
+
 ;;; Code:
 
 (require 'poem)
@@ -707,21 +714,25 @@ Modify whole identification by side effect."
       (setq lsdb-modeline-string ""))))
 
 (defun lsdb-narrow-to-record ()
+  "Narrow to the current record."
   (let ((end (next-single-property-change (point) 'lsdb-record nil
 					  (point-max))))
     (narrow-to-region
-     (previous-single-property-change (point) 'lsdb-record nil
-				      (point-min))
+     (previous-single-property-change (point) 'lsdb-record nil (point-min))
      end)
     (goto-char (point-min))))
 
 (defun lsdb-current-record ()
+  "Return the current record name."
   (let ((record (get-text-property (point) 'lsdb-record)))
     (unless record
       (error "There is nothing to follow here"))
     record))
 
 (defun lsdb-current-entry ()
+  "Return the current entry name.
+If the point is not on a entry line, it prompts to select a entry in
+the current record."
   (save-excursion
     (beginning-of-line)
     (if (looking-at "^[^\t]")
@@ -841,16 +852,31 @@ Modify whole identification by side effect."
       (setq lsdb-hash-table-is-dirty nil)
       (message "The LSDB was saved successfully."))))
 
-(if (commandp 'quit-window)
-    (defalias 'lsdb-mode-quit-window 'quit-window)
-  (defun lsdb-mode-quit-window ()
-    "Quit the current buffer."
-    (interactive)
-    (if (one-window-p)
-	(bury-buffer)
-      (delete-window))))
+(defun lsdb-mode-quit-window (&optional kill window)
+  "Quit the current buffer.
+It partially emulates the GNU Emacs' of `quit-window'."
+  (interactive "P")
+  (unless window
+    (setq window (selected-window)))
+  (let ((buffer (window-buffer window)))
+    (unless (save-selected-window
+	      (select-window window)
+	      (one-window-p))
+      (delete-window window))
+    (if kill
+	(kill-buffer buffer)
+      (bury-buffer buffer))))
+
+(defun lsdb-mode-hide-buffer ()
+  "Hide the LSDB window."
+  (let ((window (get-buffer-window lsdb-buffer-name)))
+    (if window
+	(lsdb-mode-quit-window nil window))))
 
 (defun lsdb-lookup-records (regexp &optional entry-name)
+  "Return the all records in the LSDB matching the REGEXP.
+If the optional 2nd argument ENTRY-NAME is given, matching only
+performed against the entry field."
   (let (records)
     (lsdb-maphash
      (if entry-name
@@ -876,7 +902,9 @@ Modify whole identification by side effect."
 (defvar lsdb-mode-lookup-history nil)
 
 (defun lsdb-mode-lookup (regexp &optional entry-name)
-  "Display all entries in the LSDB matching the REGEXP."
+  "Display the all records in the LSDB matching the REGEXP.
+If the optional 2nd argument ENTRY-NAME is given, matching only
+performed against the entry field."
   (interactive
    (let* ((completion-ignore-case t)
 	  (entry-name
@@ -1016,9 +1044,11 @@ of the buffer."
 (defun lsdb-wl-insinuate ()
   "Call this function to hook LSDB into Wanderlust."
   (add-hook 'wl-message-redisplay-hook 'lsdb-wl-update-record)
-  (add-hook 'wl-summary-exit-hook 'lsdb-wl-hide-buffer)
+  (add-hook 'wl-summary-exit-hook 'lsdb-mode-hide-buffer)
   (add-hook 'wl-exit-hook 'lsdb-mode-save))
 
+(eval-when-compile
+  (autoload 'wl-message-get-original-buffer "wl-message"))
 (defun lsdb-wl-update-record ()
   (save-excursion
     (set-buffer (wl-message-get-original-buffer))
@@ -1026,12 +1056,41 @@ of the buffer."
       (when records
 	(lsdb-display-record (car records))))))
 
-(defun lsdb-wl-hide-buffer ()
-  (let ((window (get-buffer-window lsdb-buffer-name)))
-    (if window
-	(delete-window window))))
+;;;_. Interface to Mew written by Hideyuki SHIRAI <shirai@rdmg.mgcs.mei.co.jp>
+(eval-when-compile
+  (ignore-errors (require 'mew)))
+
+;;;###autoload
+(defun lsdb-mew-insinuate ()
+  "Call this function to hook LSDB into Mew."
+  (add-hook 'mew-message-hook 'lsdb-mew-update-record)
+  (add-hook 'mew-summary-toggle-disp-msg-hook
+	    (lambda ()
+	      (unless (mew-sinfo-get-disp-msg)
+		(lsdb-mode-hide-buffer))))
+  (add-hook 'mew-suspend-hook 'lsdb-mode-hide-buffer)
+  (add-hook 'mew-quit-hook 'lsdb-mode-save)
+  (add-hook 'kill-emacs-hook 'lsdb-mode-save))
+
+(defun lsdb-mew-update-record ()
+  (let* ((fld (mew-current-get-fld (mew-frame-id)))
+	 (msg (mew-current-get-msg (mew-frame-id)))
+	 (cache (mew-cache-hit fld msg 'must-hit))
+	 records)
+    (save-excursion
+      (set-buffer cache)
+      (make-local-variable 'lsdb-decode-field-body-function)
+      (setq lsdb-decode-field-body-function
+	    (lambda (body name)
+	      (set-text-properties 0 (length body) nil body)
+	      body))
+      (when (setq records (lsdb-update-records))
+	(lsdb-display-record (car records))))))
 
 ;;;_. Interface to MU-CITE
+(eval-when-compile
+  (autoload 'mu-cite-get-value "mu-cite"))
+
 (defun lsdb-mu-attribution (address)
   "Extract attribute information from LSDB."
   (let ((records
@@ -1120,6 +1179,9 @@ the user wants it."
 			    #'lsdb-mu-get-prefix-register-verbose-method)))))))
 
 ;;;_. X-Face Rendering
+(defvar lsdb-x-face-cache
+  (lsdb-make-hash-table :test 'equal))
+
 (defun lsdb-x-face-available-image-type ()
   (static-if (featurep 'xemacs)
       (if (featurep 'xpm)
@@ -1134,29 +1196,24 @@ the user wants it."
 (defun lsdb-expose-x-face ()
   (let* ((record (get-text-property (point-min) 'lsdb-record))
 	 (x-face (cdr (assq 'x-face (cdr record))))
-	 (limit "\r")
-	 point)
+	 (delimiter "\r "))
     (when (and lsdb-insert-x-face-function
 	       x-face)
       (goto-char (point-min))
       (end-of-line)
-      (setq point (point))
-      (if (fboundp 'propertize)
-	  (insert (propertize limit 'invisible t) " ")
-	(put-text-property 0 1 'invisible t limit)
-	(insert limit " "))
+      (put-text-property 0 1 'invisible t delimiter)
+      (put-text-property 0 (length delimiter) 'lsdb-record record delimiter)
+      (insert delimiter)
       (while x-face
-	(funcall lsdb-insert-x-face-function (pop x-face)))
-      (put-text-property point (point) 'lsdb-record record))))
+	(funcall lsdb-insert-x-face-function (pop x-face))))))
 
-(defun lsdb-insert-x-face-image (data marker)
+(defun lsdb-insert-x-face-image (data type marker)
   (static-if (featurep 'xemacs)
       (save-excursion
 	(set-buffer (marker-buffer marker))
 	(goto-char marker)
 	(let* ((inhibit-read-only t)
 	       buffer-read-only
-	       (type (lsdb-x-face-available-image-type))
 	       (glyph (make-glyph (vector type :data data))))
 	  (set-extent-begin-glyph
 	   (make-extent (point) (point))
@@ -1166,43 +1223,44 @@ the user wants it."
       (goto-char marker)
       (let* ((inhibit-read-only t)
 	     buffer-read-only
-	     (type (lsdb-x-face-available-image-type))
 	     (image (create-image data type t :ascent 'center))
 	     (record (get-text-property (point) 'lsdb-record)))
-	(add-text-properties
-	 (point)
-	 (progn
-	   (insert " ")
-	   (point))
-	 (list 'display image
-	       'rear-nonsticky (list 'display)
-	       'lsdb-record record))))))
+	(put-text-property (point) (progn
+				     (insert-image image)
+				     (point))
+			   'lsdb-record record)))))
 
 (defun lsdb-insert-x-face-asynchronously (x-face)
-  (let* ((buffer
-	  (generate-new-buffer " *lsdb work*"))
+  (let* ((buffer (generate-new-buffer " *lsdb work*"))
 	 (type (lsdb-x-face-available-image-type))
 	 (shell-file-name lsdb-shell-file-name)
 	 (shell-command-switch lsdb-shell-command-switch)
 	 (process-connection-type nil)
-	 (process (start-process-shell-command
-		   "lsdb-x-face-command" buffer
-		   (concat "{ "
-			   (nth 1 (assq type lsdb-x-face-command-alist))
-			   "; } 2> /dev/null")))
-	 (marker (point-marker)))
-    (process-send-string process (concat x-face "\n"))
-    (process-send-eof process)
-    (set-process-sentinel
-     process
-     `(lambda (process string)
-	(when (equal string "finished\n")
-	  (lsdb-insert-x-face-image
-	   (with-current-buffer ,buffer
-	     (set-buffer-multibyte nil)
-	     (buffer-string))
-	   ,marker))
-	(kill-buffer ,buffer)))))
+	 (cached (cdr (assq type (lsdb-gethash x-face lsdb-x-face-cache))))
+	 (marker (point-marker))
+	 process)
+    (if cached
+	(lsdb-insert-x-face-image cached type marker)
+      (setq process
+	    (start-process-shell-command
+	     "lsdb-x-face-command" buffer
+	     (concat "{ "
+		     (nth 1 (assq type lsdb-x-face-command-alist))
+		     "; } 2> /dev/null")))
+      (process-send-string process (concat x-face "\n"))
+      (process-send-eof process)
+      (set-process-sentinel
+       process
+       `(lambda (process string)
+	  (when (equal string "finished\n")
+	    (let ((data
+		   (with-current-buffer ,buffer
+		     (set-buffer-multibyte nil)
+		     (buffer-string))))
+	      (lsdb-insert-x-face-image data ',type ,marker)
+	      (lsdb-puthash ,x-face (list (cons ',type data))
+			    lsdb-x-face-cache)))
+	  (kill-buffer ,buffer))))))
 
 (require 'product)
 (provide 'lsdb)

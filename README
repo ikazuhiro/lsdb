@@ -57,6 +57,13 @@ If you use Wanderlust, put the following lines into your ~/.wl:
           (lambda ()
              (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
 
+If you use Mew, put the following lines into your ~/.mew:
+(autoload 'lsdb-mew-insinuate "lsdb")
+(add-hook 'mew-init-hook 'lsdb-mew-insinuate)
+(add-hook 'mew-draft-mode-hook
+          (lambda ()
+             (define-key mew-draft-header-map "\M-\t" 'lsdb-complete-name)))
+
 If you use MU-CITE, put the following lines into your ~/.emacs:
 (autoload 'lsdb-mu-insinuate "lsdb")
 (eval-after-load "mu-cite"
