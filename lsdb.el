@@ -1712,6 +1712,7 @@ the user wants it."
 		   (lsdb-x-face-available-image-type)))
 	 (shell-file-name lsdb-shell-file-name)
 	 (shell-command-switch lsdb-shell-command-switch)
+	 (coding-system-for-read 'binary)
 	 (process-connection-type nil)
 	 (cached (cdr (assq type (lsdb-gethash x-face lsdb-x-face-cache))))
 	 (marker (point-marker))
