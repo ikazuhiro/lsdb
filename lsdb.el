@@ -44,6 +44,7 @@
 (require 'poem)
 (require 'pces)
 (require 'mime)
+(require 'static)
 
 ;;;_* USER CUSTOMIZATION VARIABLES:
 (defgroup lsdb nil
@@ -120,15 +121,28 @@ where the last element is optional."
   :group 'lsdb
   :type 'integer)
 
+(defgroup lsdb-x-face nil
+  "The Lovely Sister Database, X-Face related settings."
+  :group 'lsdb)
+
+(defcustom lsdb-display-small-x-face nil
+  "If non-nil, downscale the size of X-Face image."
+  :group 'lsdb-x-face
+  :type 'float)
+
+(defcustom lsdb-uncompface-program (exec-installed-p "uncompface")
+  "Name of the uncompface program."
+  :group 'lsdb-x-face
+  :type 'file)
+
 (defcustom lsdb-insert-x-face-function
-  (if (and (>= emacs-major-version 21)
-	   (locate-library "x-face-e21"))
-      #'lsdb-insert-x-face-with-x-face-e21
-    (if (and (featurep 'xemacs)
-	     (memq 'xface (image-instantiator-format-list)))
-	#'lsdb-insert-x-face-with-xemacs-glyph))
-  "Function to display X-Face."
-  :group 'lsdb
+  (and lsdb-uncompface-program
+       (or (>= emacs-major-version 21)
+	   (and (featurep 'xemacs)
+		(memq 'xbm (image-instantiator-format-list))))
+       #'lsdb-insert-x-face)
+  "A function to display X-Face."
+  :group 'lsdb-x-face
   :type 'function)
 
 (defcustom lsdb-display-record-hook
@@ -138,6 +152,11 @@ where the last element is optional."
   :group 'lsdb
   :type 'hook)
 
+(defcustom lsdb-display-records-sort-predicate nil
+  "A predicate to sort records."
+  :group 'lsdb
+  :type 'function)
+  
 (defgroup lsdb-edit-form nil
   "A mode for editing forms."
   :group 'lsdb)
@@ -468,6 +487,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defun lsdb-display-records (records)
   (with-output-to-temp-buffer lsdb-buffer-name
     (set-buffer standard-output)
+    (setq records
+	  (sort (copy-sequence records)
+		(or lsdb-display-records-sort-predicate
+		    (lambda (record1 record2)
+		      (string-lessp (car record1) (car record2))))))
     (while records
       (save-restriction
 	(narrow-to-region (point) (point))
@@ -552,6 +576,85 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (insert (pop lsdb-last-candidates-pointer)))))
 
 ;;;_. Major Mode (`lsdb-mode') Implementation
+;;;_ : Modeline Buffer Identification
+(defconst lsdb-pointer-xpm
+  "/* XPM */
+static char * lsdb_pointer_xpm[] = {
+\"14 14 5 1\",
+\" 	c None\",
+\"+	c #FF9696\",
+\"@	c #FF0000\",
+\"#	c #FF7575\",
+\"$	c #FF5959\",
+\"              \",
+\"  +++   @@@   \",
+\" +++## @@@@@  \",
+\" ++### @@@@@  \",
+\" +#####@@@@@  \",
+\" +###$$@@@@@  \",
+\" +###$$@@@@@  \",
+\"  ##$$$@@@@   \",
+\"   #$$$@@@    \",
+\"    $$@@@     \",
+\"     $@@      \",
+\"      @       \",
+\"              \",
+\"              \"};")
+
+(static-if (featurep 'xemacs)
+    (progn
+      (defvar lsdb-xemacs-modeline-left-extent
+	(copy-extent modeline-buffer-id-left-extent))
+
+      (defvar lsdb-xemacs-modeline-right-extent
+	(copy-extent modeline-buffer-id-right-extent))
+
+      (defun lsdb-modeline-buffer-identification (line)
+	"Decorate 1st element of `mode-line-buffer-identification' LINE.
+Modify whole identification by side effect."
+	(let ((id (car line)) chopped)
+	  (if (and (stringp id) (string-match "^LSDB:" id))
+	      (progn
+		(setq chopped (substring id 0 (match-end 0))
+		      id (substring id (match-end 0)))
+		(nconc
+		 (list
+		  (let ((glyph
+			 (make-glyph
+			  (nconc
+			   (if (featurep 'xpm)
+			       (list (vector 'xpm :data lsdb-pointer-xpm)))
+			   (list (vector 'string :data chopped))))))
+		    (if glyph
+			(progn
+			  (set-glyph-face glyph 'modeline-buffer-id)
+			  (cons lsdb-xemacs-modeline-left-extent glyph))
+		      (cons lsdb-xemacs-modeline-left-extent
+			    chopped)))
+		  (cons lsdb-xemacs-modeline-right-extent id))
+		 (cdr line)))
+	    line))))
+  (condition-case nil
+      (progn
+	(require 'image)
+	(defun lsdb-modeline-buffer-identification (line)
+	  "Decorate 1st element of `mode-line-buffer-identification' LINE.
+Modify whole identification by side effect."
+	  (let ((id (copy-sequence (car line)))
+		(image
+		 (if (image-type-available-p 'xpm)
+		     (create-image lsdb-pointer-xpm 'xpm t :ascent 'center))))
+	    (when (and image
+		       (stringp id) (string-match "^LSDB:" id))
+	      (add-text-properties 0 (length id)
+				   (list 'display image
+					 'rear-nonsticky (list 'display))
+				   id)
+	      (setcar line id))
+	    line)))
+    (error
+     (defalias 'lsdb-modeline-buffer-identification 'identity))))
+
 (defvar lsdb-mode-map
   (let ((keymap (make-sparse-keymap)))
     (define-key keymap "a" 'lsdb-mode-add-entry)
@@ -569,6 +672,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     keymap)
   "LSDB's keymap.")
 
+(defvar lsdb-modeline-string "")
+
 (define-derived-mode lsdb-mode fundamental-mode "LSDB"
   "Major mode for browsing LSDB records."
   (setq buffer-read-only t)
@@ -577,13 +682,36 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       ;; `find-file-hooks'.
       (font-lock-set-defaults)
     (set (make-local-variable 'font-lock-defaults)
-	 '(lsdb-font-lock-keywords t))))
+	 '(lsdb-font-lock-keywords t)))
+  (make-local-variable 'post-command-hook)
+  (setq post-command-hook 'lsdb-modeline-update)
+  (make-local-variable 'lsdb-modeline-string)
+  (setq mode-line-buffer-identification
+	(lsdb-modeline-buffer-identification
+	 '("LSDB: " lsdb-modeline-string)))
+  (lsdb-modeline-update)
+  (force-mode-line-update))
+
+(defun lsdb-modeline-update ()
+  (let ((record
+	 (get-text-property (if (eobp) (point-min) (point)) 'lsdb-record))
+	net)
+    (if record
+	(progn
+	  (setq net (car (cdr (assq 'net (cdr record)))))
+	  (if (equal net (car record))
+	      (setq lsdb-modeline-string net)
+	    (setq lsdb-modeline-string (concat (car record) " <" net ">"))))
+      (setq lsdb-modeline-string ""))))
 
 (defun lsdb-narrow-to-record ()
-  (narrow-to-region
-   (previous-single-property-change (point) 'lsdb-record nil (point-min))
-   (next-single-property-change (point) 'lsdb-record nil (point-max)))
-  (goto-char (point-min)))
+  (let ((end (next-single-property-change (point) 'lsdb-record nil
+					  (point-max))))
+    (narrow-to-region
+     (previous-single-property-change (point) 'lsdb-record nil
+				      (point-min))
+     end)
+    (goto-char (point-min))))
 
 (defun lsdb-current-record ()
   (let ((record (get-text-property (point) 'lsdb-record)))
@@ -699,12 +827,13 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 		 (point))
 	       (list 'lsdb-record record)))))))))
 
-(defun lsdb-mode-save ()
+(defun lsdb-mode-save (&optional ask)
   "Save LSDB hash table into `lsdb-file'."
   (interactive)
   (if (not lsdb-hash-table-is-dirty)
       (message "(No changes need to be saved)")
     (when (or (interactive-p)
+	      (not ask)
 	      (y-or-n-p "Save the LSDB now?"))
       (lsdb-save-file lsdb-file lsdb-hash-table)
       (setq lsdb-hash-table-is-dirty nil)
@@ -1004,30 +1133,98 @@ the user wants it."
       (while x-face
 	(funcall lsdb-insert-x-face-function (pop x-face))))))
 
-;; stolen (and renamed) from gnus-summary-x-face.el written by Akihiro Arisawa.
-(defvar lsdb-x-face-scale-factor 0.5
-  "A number of scale factor used to scale down X-face image.
-See also `x-face-scale-factor'.")
+(defun lsdb-call-process-on-string
+  (program string &optional buffer &rest args)
+  (if (eq buffer t)
+      (setq buffer (current-buffer)))
+  (let ((process (apply #'start-process program buffer program args))
+	status exit-status)
+    (unwind-protect
+	(progn
+	  (set-process-sentinel process #'ignore) ;don't insert exit status
+	  (process-send-string process string)
+	  (process-send-eof process)
+	  (while (eq 'run (process-status process))
+	    (accept-process-output process 5))
+	  (setq status (process-status process)
+		exit-status (process-exit-status process))
+	  (if (memq status '(stop signal))
+	      (error "%s exited abnormally: '%s'" program exit-status))
+	  (if (= 127 exit-status)
+	      (error "%s could not be found" program))
+	  (delete-process process))
+      (if (and process (eq 'run (process-status process)))
+	  (interrupt-process process)))))
 
-(defun lsdb-insert-x-face-with-x-face-e21 (x-face)
-  (require 'x-face-e21)
-  (insert-image (x-face-create-image
-		 x-face :scale-factor lsdb-x-face-scale-factor)))
+(eval-and-compile
+  (defun lsdb-mirror-bits (bits nbits)
+    (if (= nbits 1)
+	bits
+      (logior (lsh (lsdb-mirror-bits (logand bits (1- (lsh 1 (/ nbits 2))))
+				     (/ nbits 2))
+		   (/ nbits 2))
+	      (lsdb-mirror-bits (lsh bits (- (/ nbits 2)))
+				(/ nbits 2))))))
+(defconst lsdb-mirror-bytes
+  (eval-when-compile
+    (let ((table (make-vector 256 0))
+	  (i 0))
+      (while (< i 256)
+	(aset table i (logxor (lsdb-mirror-bits i 8) 255))
+	(setq i (1+ i)))
+      table)))
+      
+(defun lsdb-convert-x-face-to-xbm (x-face &optional bit-reverse)
+  (with-temp-buffer
+    (lsdb-call-process-on-string
+     lsdb-uncompface-program (concat x-face "\n") t)
+    (set-buffer-multibyte nil)
+    (let* ((result (make-string 288 ?\0))
+	   (index 0))
+      (goto-char (point-min))
+      (while (re-search-forward
+	      "0x\\([0-9A-F][0-9A-F]\\)\\([0-9A-F][0-9A-F]\\),\n?" nil
+	      t)
+	(aset result
+	      (prog1 index
+		(setq index (1+ index)))
+	      (car (read-from-string
+		    (concat "?\\x" (match-string 1)))))
+	(aset result
+	      (prog1 index
+		(setq index (1+ index)))
+	      (car (read-from-string
+		    (concat "?\\x" (match-string 2))))))
+      (when bit-reverse
+	(setq index 0)
+	(while (< index 288)
+	  (aset result index
+		(aref lsdb-mirror-bytes (aref result index)))
+	  (setq index (1+ index))))
+      (list 48 48 result))))
 
-(defun lsdb-insert-x-face-with-xemacs-glyph (x-face)
-  (let ((glyph
-	 (make-glyph
-	  (vector 'xface :data (concat "X-Face: " x-face)))))
-    (if glyph
-	(set-extent-end-glyph
-	 (make-extent (point) (point))
-	 glyph))))
+(autoload 'xbm-make-thumbnail "xbm-thumb")
+
+(defun lsdb-insert-x-face (x-face)
+  (let ((data
+	 (if lsdb-display-small-x-face
+	     (xbm-make-thumbnail (lsdb-convert-x-face-to-xbm x-face t))
+	   (lsdb-convert-x-face-to-xbm x-face t))))
+    (static-if (featurep 'xemacs)
+	(let ((glyph (make-glyph (vector 'xbm :data data))))
+	  (if glyph
+	      (set-extent-end-glyph
+	       (make-extent (point) (point))
+	       glyph)))
+      (insert-image
+       (create-image
+	(nth 2 data) 'xbm t :width (car data) :height (nth 1 data))))))
 
 (require 'product)
 (provide 'lsdb)
 
 (product-provide 'lsdb
-  (product-define "LSDB" nil '(0 1)))
+  (product-define "LSDB" nil '(0 2)))
 
 ;;;_* Local emacs vars.
 ;;; The following `outline-layout' local variable setting:

@@ -5,7 +5,7 @@
 ;;; Code:
 
 (setq lsdb-modules-to-compile
-      '(lsdb))
+      '(xbm-thumb lsdb))
 
 (setq lsdb-modules-not-to-compile nil)
 
