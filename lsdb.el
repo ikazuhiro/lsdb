@@ -3,7 +3,7 @@
 ;; Copyright (C) 2002 Daiki Ueno
 
 ;; Author: Daiki Ueno <ueno@unixuser.org>
-;; Keywords: adress book
+;; Keywords: address book
 
 ;; This file is part of the Lovely Sister Database.
 
@@ -36,8 +36,8 @@
 ;;;             (define-key gnus-summary-mode-map ":" 'lsdb-toggle-buffer)))
 
 ;;; For Wanderlust, put the following lines into your ~/.wl:
-;;; (require 'lsdb)
-;;; (lsdb-wl-insinuate)
+;;; (autoload 'lsdb-wl-insinuate "lsdb")
+;;; (add-hook 'wl-init-hook 'lsdb-wl-insinuate)
 ;;; (add-hook 'wl-draft-mode-hook
 ;;;           (lambda ()
 ;;;             (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
