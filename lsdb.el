@@ -83,8 +83,11 @@
 
 (defcustom lsdb-interesting-header-alist
   '(("Organization" nil organization)
-    ("\\(X-\\)?User-Agent\\|X-Mailer" nil user-agent)
+    ("\\(X-\\)?User-Agent\\|X-Mailer\\|X-Newsreader" nil user-agent)
     ("\\(X-\\)?ML-Name" nil mailing-list)
+    ("List-Id" "\\(.*\\)[ \t]+<[^>]+>\\'" mailing-list "\\1")
+    ("X-Sequence" "\\(.*\\)[ \t]+[0-9]+\\'" mailing-list "\\1")
+    ("Delivered-To" "mailing list[ \t]+\\([^@]+\\)@.*" mailing-list "\\1")
     ("\\(X-URL\\|X-URI\\)" nil www)
     ("X-Attribution\\|X-cite-me" nil attribution)
     ("X-Face" nil x-face))
@@ -97,18 +100,24 @@ where the last three elements are optional."
 
 (defcustom lsdb-entry-type-alist
   '((net 5 ?,)
-    (creation-date 2)
-    (last-modified 3)
+    (creation-date 2 ?. t)
+    (last-modified 3 ?. t)
     (mailing-list 4 ?,)
     (attribution 4 ?.)
     (organization 4)
     (www 1)
     (score -1)
     (x-face -1))
-  "Alist of entries to display.
+  "Alist of entry types for presentation.
 The format of elements of this list should be
-     (ENTRY SCORE CLASS)
-where the last element is optional."
+     (ENTRY SCORE [CLASS READ-ONLY])
+where the last two elements are optional.
+Possible values for CLASS are `?.' and '?,'.  If CLASS is `?.', the
+entry takes a unique value which is overridden by newly assigned one
+by `lsdb-mode-edit-entry' or such a command.  If CLASS is `?,', the
+entry can have multiple values separated by commas.
+If the fourth element READ-ONLY is non-nil, it is assumed that the
+entry cannot be modified."
   :group 'lsdb
   :type 'list)
 
@@ -435,13 +444,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (setq alist lsdb-interesting-header-alist)
       (while alist
 	(setq bodies
-	      (mapcar
-	       (lambda (field-body)
-		 (if (and (nth 1 (car alist))
-			  (string-match (nth 1 (car alist)) field-body))
-		     (replace-match (nth 3 (car alist)) nil nil field-body)
-		   field-body))
-	       (lsdb-fetch-field-bodies (car (car alist)))))
+	      (delq nil (mapcar
+			 (lambda (field-body)
+			   (if (nth 1 (car alist))
+			       (and (string-match (nth 1 (car alist))
+						  field-body)
+				    (replace-match (nth 3 (car alist))
+						   nil nil field-body))
+			     field-body))
+			 (lsdb-fetch-field-bodies (car (car alist))))))
 	(when bodies
 	  (setq entry (or (nth 2 (car alist))
 			  'notes))
@@ -585,7 +596,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	       (if (string-match pattern (car net))
 		   (push (car net) lsdb-last-candidates))
 	       (setq net (cdr net))))))
-       lsdb-hash-table))
+       lsdb-hash-table)
+      ;; Sort candidates by the position where the pattern occurred.
+      (setq lsdb-last-candidates
+	    (sort lsdb-last-candidates
+		  (lambda (cand1 cand2)
+		    (< (if (string-match pattern cand1)
+			   (match-beginning 0))
+		       (if (string-match pattern cand2)
+			   (match-beginning 0)))))))
     (unless lsdb-last-candidates-pointer
       (setq lsdb-last-candidates-pointer lsdb-last-candidates))
     (when lsdb-last-candidates-pointer
