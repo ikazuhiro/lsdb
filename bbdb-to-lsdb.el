@@ -47,7 +47,7 @@
 	    (list (cons 'aka value)))
 	(if (setq value (bbdb-record-company (car bbdb-records)))
 	    (list (cons 'company value)))
-	(bbdb-record-notes (car bbdb-records)))))
+	(bbdb-record-raw-notes (car bbdb-records)))))
     (setq bbdb-records (cdr bbdb-records)))
   (lsdb-mode-save t))
 
