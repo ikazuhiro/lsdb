@@ -1076,7 +1076,7 @@ the current record."
       (message "(No changes need to be saved)")
     (when (or (interactive-p)
 	      dont-ask
-	      (y-or-n-p "Save the LSDB now?"))
+	      (y-or-n-p "Save the LSDB now? "))
       (lsdb-save-hash-tables)
       (setq lsdb-hash-tables-are-dirty nil)
       (message "The LSDB was saved successfully."))))
