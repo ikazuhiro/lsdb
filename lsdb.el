@@ -1232,8 +1232,7 @@ the user wants it."
 			   'lsdb-record record)))))
 
 (defun lsdb-insert-x-face-asynchronously (x-face)
-  (let* ((buffer (generate-new-buffer " *lsdb work*"))
-	 (type (lsdb-x-face-available-image-type))
+  (let* ((type (lsdb-x-face-available-image-type))
 	 (shell-file-name lsdb-shell-file-name)
 	 (shell-command-switch lsdb-shell-command-switch)
 	 (process-connection-type nil)
@@ -1244,7 +1243,7 @@ the user wants it."
 	(lsdb-insert-x-face-image cached type marker)
       (setq process
 	    (start-process-shell-command
-	     "lsdb-x-face-command" buffer
+	     "lsdb-x-face-command" (generate-new-buffer " *lsdb work*")
 	     (concat "{ "
 		     (nth 1 (assq type lsdb-x-face-command-alist))
 		     "; } 2> /dev/null")))
@@ -1253,15 +1252,16 @@ the user wants it."
       (set-process-sentinel
        process
        `(lambda (process string)
-	  (when (equal string "finished\n")
-	    (let ((data
-		   (with-current-buffer ,buffer
-		     (set-buffer-multibyte nil)
-		     (buffer-string))))
-	      (lsdb-insert-x-face-image data ',type ,marker)
-	      (lsdb-puthash ,x-face (list (cons ',type data))
-			    lsdb-x-face-cache)))
-	  (kill-buffer ,buffer))))))
+	  (unwind-protect
+	      (when (equal string "finished\n")
+		(let ((data
+		       (with-current-buffer (process-buffer process)
+			 (set-buffer-multibyte nil)
+			 (buffer-string))))
+		  (lsdb-insert-x-face-image data ',type ,marker)
+		  (lsdb-puthash ,x-face (list (cons ',type data))
+				lsdb-x-face-cache)))
+	    (kill-buffer (process-buffer process))))))))
 
 (require 'product)
 (provide 'lsdb)
