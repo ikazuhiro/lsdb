@@ -321,7 +321,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (setq merged (lsdb-merge-record-entries old new)
 	  record (cons (nth 1 sender) merged))
     (unless (equal merged old)
-      (lsdb-puthash (car record) (cdr record) lsdb-hash-table)
+      (lsdb-puthash (car record) (copy-sequence (cdr record))
+		    lsdb-hash-table)
       (setq lsdb-hash-table-is-dirty t))
     record))
 
@@ -368,6 +369,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (nreverse records)))
 
 (defun lsdb-merge-record-entries (old new)
+  (setq old (copy-sequence old))
   (while new
     (let ((entry (assq (car (car new)) old))
 	  list pointer)
@@ -434,6 +436,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 ;;;_. Completion
 (defvar lsdb-last-completion nil)
+(defvar lsdb-last-candidates nil)
 
 (defun lsdb-complete-name ()
   "Complete the user full-name or net-address before point"
@@ -444,35 +447,36 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	    (goto-char (match-end 0))
 	    (point)))
 	 (string
-	  (if (and (eq last-command this-command)
-		   (stringp lsdb-last-completion))
+	  (if (eq last-command this-command)
 	      lsdb-last-completion
 	    (buffer-substring start (point))))
 	 (pattern
-	  (concat "\\`" string))
+	  (concat "\\<" string))
 	 (case-fold-search t)
-	 (completion-ignore-case t)
-	 candidates)
-    (lsdb-maphash
-     (lambda (key value)
-       (let ((net (cdr (assq 'net value))))
-	 (if (string-match pattern key)
-	     (setq candidates
-		   (nconc candidates
-			  (mapcar (lambda (address)
-				    (list (concat key " <" address ">")))
-				  net)))
-	   (while net
-	     (if (string-match pattern (car net))
-		 (push (list (car net)) candidates))
-	     (setq net (cdr net))))))
-     lsdb-hash-table)
-    (setq lsdb-last-completion (try-completion string candidates))
-    (if (null lsdb-last-completion)
-	(error "No match")
-      (when (stringp lsdb-last-completion)
-	(delete-region start (point))
-	(insert lsdb-last-completion)))))
+	 (completion-ignore-case t))
+    (unless (eq last-command this-command)
+      (setq lsdb-last-candidates nil)
+      (lsdb-maphash
+       (lambda (key value)
+	 (let ((net (cdr (assq 'net value))))
+	   (if (string-match pattern key)
+	       (setq lsdb-last-candidates
+		     (nconc lsdb-last-candidates
+			    (mapcar (lambda (address)
+				      (if (equal key address)
+					  key
+					(concat key " <" address ">")))
+				    net)))
+	     (while net
+	       (if (string-match pattern (car net))
+		   (push (car net) lsdb-last-candidates))
+	       (setq net (cdr net))))))
+       lsdb-hash-table)
+      (setq lsdb-last-completion string))
+    (unless lsdb-last-candidates
+      (error "No match"))
+    (delete-region start (point))
+    (insert (pop lsdb-last-candidates))))
 
 ;;;_. Major Mode (`lsdb-mode') Implementation
 (define-derived-mode lsdb-mode fundamental-mode "LSDB"
