@@ -196,7 +196,8 @@ where the last element is optional."
   "An obarray used to complete an entry name.")
 
 ;;;_. Hash Table Emulation
-(if (fboundp 'make-hash-table)
+(if (and (fboundp 'make-hash-table)
+	 (subrp (symbol-function 'make-hash-table)))
     (progn
       (defalias 'lsdb-puthash 'puthash)
       (defalias 'lsdb-gethash 'gethash)
