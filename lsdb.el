@@ -43,7 +43,7 @@
 ;;;             (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
 ;;; (add-hook 'wl-summary-mode-hook
 ;;;           (lambda ()
-;;;             (define-key wl-summary-mode-map ":" 'lsdb-toggle-buffer)))
+;;;             (define-key wl-summary-mode-map ":" 'lsdb-wl-toggle-buffer)))
 
 ;;; For Mew, put the following lines into your ~/.mew:
 ;;; (autoload 'lsdb-mew-insinuate "lsdb")
@@ -1290,7 +1290,7 @@ of the buffer."
   (add-hook 'wl-summary-toggle-disp-folder-on-hook 'lsdb-hide-buffer)
   (add-hook 'wl-summary-toggle-disp-folder-off-hook 'lsdb-hide-buffer)
   (add-hook 'wl-summary-toggle-disp-folder-message-resumed-hook
-	    'lsdb-show-buffer)
+	    'lsdb-wl-show-buffer)
   (add-hook 'wl-exit-hook 'lsdb-mode-save)
   (add-hook 'wl-save-hook 'lsdb-mode-save))
 
@@ -1304,6 +1304,24 @@ of the buffer."
 	(let ((lsdb-temp-buffer-show-function
 	       #'lsdb-wl-temp-buffer-show-function))
 	  (lsdb-display-record (car records)))))))
+
+(defun lsdb-wl-toggle-buffer (&optional arg)
+  "Toggle hiding of the LSDB window for Wanderlust.
+If given a negative prefix, always show; if given a positive prefix,
+always hide."
+  (interactive
+   (list (if current-prefix-arg
+	     (prefix-numeric-value current-prefix-arg)
+	   0)))
+  (let ((lsdb-temp-buffer-show-function
+	 #'lsdb-wl-temp-buffer-show-function))
+    (lsdb-toggle-buffer arg)))
+
+(defun lsdb-wl-show-buffer ()
+  (when lsdb-pop-up-windows
+    (let ((lsdb-temp-buffer-show-function
+	   #'lsdb-wl-temp-buffer-show-function))
+      (lsdb-show-buffer))))
 
 (defvar wl-current-summary-buffer)
 (defvar wl-message-buffer)

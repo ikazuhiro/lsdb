@@ -74,7 +74,7 @@ If you use Wanderlust, put the following lines into your ~/.wl:
              (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
 (add-hook 'wl-summary-mode-hook
           (lambda ()
-            (define-key wl-summary-mode-map ":" 'lsdb-toggle-buffer)))
+            (define-key wl-summary-mode-map ":" 'lsdb-wl-toggle-buffer)))
 
 If you use Mew, put the following lines into your ~/.mew:
 (autoload 'lsdb-mew-insinuate "lsdb")
