@@ -1815,8 +1815,10 @@ the user wants it."
 	 process)
     (if cached
 	(lsdb-insert-x-face-image cached type marker)
-      (setq buffer (generate-new-buffer " *lsdb work*")
-	    process
+      (with-current-buffer (setq buffer (generate-new-buffer " *lsdb work*"))
+	(buffer-disable-undo)
+	(set-buffer-multibyte nil))
+      (setq process
 	    (start-process-shell-command
 	     "lsdb-x-face-command" buffer
 	     (concat "{ "
@@ -1840,7 +1842,6 @@ the user wants it."
 	      (if (equal string "finished\n")
 		  (let ((data
 			 (with-current-buffer ,buffer
-			   (set-buffer-multibyte nil)
 			   (buffer-string))))
 		    (lsdb-insert-x-face-image data ',type ,marker)
 		    (lsdb-puthash ,x-face (list (cons ',type data))
@@ -1921,8 +1922,10 @@ the user wants it."
 	 process)
     (if cached
 	(lsdb-insert-face-image cached type marker)
-      (setq buffer (generate-new-buffer " *lsdb work*")
-	    process
+      (with-current-buffer (setq buffer (generate-new-buffer " *lsdb work*"))
+	(buffer-disable-undo)
+	(set-buffer-multibyte nil))
+      (setq process
 	    (start-process-shell-command
 	     "lsdb-face-command" buffer
 	     (concat "{ "
@@ -1946,7 +1949,6 @@ the user wants it."
 	      (if (equal string "finished\n")
 		  (let ((data
 			 (with-current-buffer ,buffer
-			   (set-buffer-multibyte nil)
 			   (buffer-string))))
 		    (lsdb-insert-face-image data ',type ,marker)
 		    (lsdb-puthash ,face (list (cons ',type data))
