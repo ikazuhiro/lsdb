@@ -328,12 +328,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (if (and (or (featurep 'mule)
 		   (featurep 'file-coding))
 	       lsdb-file-coding-system)
-	  (insert ";;; -*- coding: "
-		  (if (symbolp lsdb-file-coding-system)
-		      (symbol-name lsdb-file-coding-system)
-		    ;; XEmacs
-		    (symbol-name (coding-system-name lsdb-file-coding-system)))
-		  " -*-\n"))
+	  (let ((coding-system-name
+		 (if (symbolp lsdb-file-coding-system)
+		     (symbol-name lsdb-file-coding-system)
+		   ;; XEmacs
+		   (static-if (featurep 'xemacs)
+		       (symbol-name (coding-system-name
+				     lsdb-file-coding-system))))))
+	    (if coding-system-name
+		(insert ";;; -*- coding: " coding-system-name " -*-\n"))))
       (insert "#s(hash-table size "
 	      (number-to-string (lsdb-hash-table-size hash-table))
 	      " test equal data (")
@@ -686,7 +689,7 @@ Modify whole identification by side effect."
 (define-derived-mode lsdb-mode fundamental-mode "LSDB"
   "Major mode for browsing LSDB records."
   (setq buffer-read-only t)
-  (if (featurep 'xemacs)
+  (static-if (featurep 'xemacs)
       ;; In XEmacs, setting `font-lock-defaults' only affects on
       ;; `find-file-hooks'.
       (font-lock-set-defaults)
@@ -1059,7 +1062,11 @@ of the buffer."
 
 ;;;_. Interface to Mew written by Hideyuki SHIRAI <shirai@rdmg.mgcs.mei.co.jp>
 (eval-when-compile
-  (ignore-errors (require 'mew)))
+  (autoload 'mew-sinfo-get-disp-msg "mew")
+  (autoload 'mew-current-get-fld "mew")
+  (autoload 'mew-current-get-msg "mew")
+  (autoload 'mew-frame-id "mew")
+  (autoload 'mew-cache-hit "mew"))
 
 ;;;###autoload
 (defun lsdb-mew-insinuate ()
