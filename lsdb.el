@@ -76,7 +76,9 @@
   '(("Organization" nil organization)
     ("\\(X-\\)?User-Agent\\|X-Mailer" nil user-agent)
     ("\\(X-\\)?ML-Name" nil mailing-list)
-    ("X-Attribution\\|X-cite-me" nil attribution))
+    ("\\(X-URL\\|X-URI\\)" nil www)
+    ("X-Attribution\\|X-cite-me" nil attribution)
+    ("X-Face" nil x-face))
   "Alist of headers we are interested in.
 The format of elements of this list should be
      (FIELD-NAME REGEXP ENTRY STRING)
@@ -87,11 +89,13 @@ where the last three elements are optional."
 (defcustom lsdb-entry-type-alist
   '((net 5 ?,)
     (creation-date 2)
-    (last-modified 2)
-    (mailing-list 3 ?,)
-    (attribution 3 ?.)
-    (organization 3)
-    (score -1))
+    (last-modified 3)
+    (mailing-list 4 ?,)
+    (attribution 4 ?.)
+    (organization 4)
+    (www 1)
+    (score -1)
+    (x-face -1))
   "Alist of entries to display.
 The format of elements of this list should be
      (ENTRY SCORE CLASS)
@@ -121,6 +125,21 @@ where the last element is optional."
   :group 'lsdb
   :type 'integer)
 
+(defcustom lsdb-insert-x-face-function
+  (if (and (>= emacs-major-version 21)
+	   (locate-library "x-face-e21"))
+      #'lsdb-insert-x-face-with-x-face-e21)
+  "Function to display X-Face."
+  :group 'lsdb
+  :type 'function)
+
+(defcustom lsdb-display-record-hook
+  (if lsdb-insert-x-face-function
+      #'lsdb-expose-x-face)
+  "A hook called after a record is displayed."
+  :group 'lsdb
+  :type 'function)
+
 ;;;_. Faces
 (defface lsdb-header-face
   '((t (:underline t)))
@@ -145,7 +164,7 @@ where the last element is optional."
 (defvar lsdb-field-body-face 'lsdb-field-body-face)
 
 (defconst lsdb-font-lock-keywords
-  '(("^\\sw.*$"
+  '(("^\\sw[^\r\n]*"
      (0 lsdb-header-face))
     ("^\t\t.*$"
      (0 lsdb-field-body-face))
@@ -430,32 +449,50 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  (shrink-window-if-larger-than-buffer)))))
 
 (defun lsdb-display-record (record)
+  "Display only one RECORD, then shrink the window as possible."
   (let ((temp-buffer-show-function
 	 (function lsdb-temp-buffer-show-function)))
-    (with-output-to-temp-buffer lsdb-buffer-name
-      (set-buffer standard-output)
-      (funcall lsdb-print-record-function record)
-      (lsdb-mode))))
+    (lsdb-display-records (list record))))
+
+(defun lsdb-display-records (records)
+  (with-output-to-temp-buffer lsdb-buffer-name
+    (set-buffer standard-output)
+    (while records
+      (save-restriction
+	(narrow-to-region (point) (point))
+	(funcall lsdb-print-record-function (car records))
+	(add-text-properties (point-min) (point-max)
+			     (list 'lsdb-record (car records)
+				   ;; Forbid to expand the area the
+				   ;; text properties are effective.
+				   'start-open t ;XEmacs
+				   'rear-nonsticky t ;GNU Emacs
+				   ))
+	(run-hooks 'lsdb-display-record-hook))
+      (setq records (cdr records)))
+    (lsdb-mode)))
+
+(defsubst lsdb-entry-score (entry)
+  (or (nth 1 (assq (car entry) lsdb-entry-type-alist)) 0))
 
 (defun lsdb-print-record (record)
   (insert (car record) "\n")
   (let ((entries
 	 (sort (cdr record)
 	       (lambda (entry1 entry2)
-		 (> (or (nth 1 (assq (car entry1) lsdb-entry-type-alist))
-			0)
-		    (or (nth 1 (assq (car entry2) lsdb-entry-type-alist))
-			0))))))
+		 (> (lsdb-entry-score entry1) (lsdb-entry-score entry2))))))
     (while entries
-      (insert "\t" (capitalize (symbol-name (car (car entries)))) ": "
-	      (if (listp (cdr (car entries)))
-		  (mapconcat #'identity (cdr (car entries))
-			     (if (eq ?, (nth 2 (assq (car (car entries))
-						     lsdb-entry-type-alist)))
-				 ", "
-			       "\n\t\t"))
-		(cdr (car entries)))
-	      "\n")
+      (if (>= (lsdb-entry-score (car entries)) 0)
+	  (insert "\t" (capitalize (symbol-name (car (car entries)))) ": "
+		  (if (listp (cdr (car entries)))
+		      (mapconcat
+		       #'identity (cdr (car entries))
+		       (if (eq ?, (nth 2 (assq (car (car entries))
+					       lsdb-entry-type-alist)))
+			   ", "
+			 "\n\t\t"))
+		    (cdr (car entries)))
+		  "\n"))
       (setq entries (cdr entries)))))
 
 ;;;_. Completion
@@ -550,6 +587,28 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (let ((window (get-buffer-window lsdb-buffer-name)))
     (if window
 	(delete-window window))))
+
+;;;_. X-Face Rendering
+(defun lsdb-expose-x-face ()
+  (let* ((record (get-text-property (point-min) 'lsdb-record))
+	 (x-face (cdr (assq 'x-face (cdr record)))))
+    (when (and lsdb-insert-x-face-function
+	       x-face)
+      (goto-char (point-min))
+      (end-of-line)
+      (insert (propertize "\r" 'invisible t) " ")
+      (while x-face
+	(funcall lsdb-insert-x-face-function (pop x-face))))))
+
+;; stolen (and renamed) from gnus-summary-x-face.el written by Akihiro Arisawa.
+(defvar lsdb-x-face-scale-factor 0.5
+  "A number of scale factor used to scale down X-face image.
+See also `x-face-scale-factor'.")
+
+(defun lsdb-insert-x-face-with-x-face-e21 (x-face)
+  (require 'x-face-e21)
+  (insert-image (x-face-create-image
+		 x-face :scale-factor lsdb-x-face-scale-factor)))
 
 (provide 'lsdb)
 
