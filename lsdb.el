@@ -260,6 +260,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
        hash-table)
       (insert "))"))))
 
+(defun lsdb-offer-save ()
+  (if (and lsdb-hash-table-is-dirty
+	   (y-or-n-p "Save the LSDB now?"))
+      (lsdb-save-file lsdb-file lsdb-hash-table)))
+
 ;;;_. Mail Header Extraction
 (defun lsdb-fetch-field-bodies (entity regexp)
   (save-excursion
@@ -484,7 +489,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defun lsdb-gnus-insinuate ()
   "Call this function to hook LSDB into Semi-gnus."
   (add-hook 'gnus-article-prepare-hook 'lsdb-gnus-update-record)
-  (add-hook 'gnus-save-newsrc-hook 'lsdb-gnus-offer-save))
+  (add-hook 'gnus-save-newsrc-hook 'lsdb-offer-save))
 
 (defvar message-mode-map)
 (defun lsdb-gnus-insinuate-message ()
@@ -496,11 +501,6 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (let ((records (lsdb-update-records gnus-current-headers)))
     (when records
       (lsdb-display-record (car records)))))
-
-(defun lsdb-gnus-offer-save ()
-  (if (and lsdb-hash-table-is-dirty
-	   (y-or-n-p "Save the LSDB now?"))
-      (lsdb-save-file lsdb-file lsdb-hash-table)))
 
 (provide 'lsdb)
 
