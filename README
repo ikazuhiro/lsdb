@@ -1,0 +1,111 @@
+-*- mode: text -*-
+.* What's LSDB
+
+LSDB (The Lovely Sister Database) is a rolodex-like database program
+for SEMI based MUA.  It's intended to be a lightweight relacement for
+BBDB (The Insidious Big Brother Database).  Unfortunately, it
+currently doesn't support the all features of BBDB.
+
+.* Installation
+
+.. (a) run in expanded place
+
+If you don't want to install other directories, please do only
+following:
+
+	% make
+
+You can specify the emacs command name, for example
+
+	% make install EMACS=xemacs
+
+If `EMACS=...' is omitted, EMACS=emacs is used.
+
+.. (b) make install
+
+If you want to install other directories, please do following:
+
+	% make install
+
+.. (c) install as a XEmacs package
+
+If you want to install to XEmacs package directory, please do
+following:
+
+	% make install-package
+
+.* MUA Specific Installation
+
+There are the convenient ways to get the LSDB functions insinuate into
+some particular MUA.  Only Semi-gnus and Wanderlust are currently
+supported.
+
+If you use Semi-gnus or its variant, put the following lines into your
+~/.gnus and you will get the functions in this package autoloaded.
+
+(autoload 'lsdb-gnus-insinuate "lsdb")
+(autoload 'lsdb-gnus-insinuate-message "lsdb")
+(add-hook 'gnus-startup-hook 'lsdb-gnus-insinuate)
+(add-hook 'message-setup-hook
+          (lambda ()
+             (define-key message-mode-map "\M-\t" 'lsdb-complete-name)))
+
+If you use Wanderlust, put the following lines into your ~/.wl:
+(require 'lsdb)
+(lsdb-wl-insinuate)
+(add-hook 'wl-draft-mode-hook
+          (lambda ()
+             (define-key wl-draft-mode-map "\M-\t" 'lsdb-complete-name)))
+
+.* Bug reports
+If you found bugs, please drop a note to the EMACS-MIME Mailing List:
+
+	emacs-mime-en@m17n.org	(English)
+	emacs-mime-ja@m17n.org	(Japanese)
+
+.* API
+The API are quite simple but not written in a way that maximizes
+flexibility.
+
+.. Gathering Records
+. : lsdb-update-records<f>
+lsdb-update-records<f> is called from the buffer which contains raw
+contents of MIME entity.  Once it is called, it returns a list of
+records which could be gathered from the buffer.
+
+.. Display Records
+. : lsdb-display-record<f>
+lsdb-display-record<f> takes only one record, pops up a window, and
+displays the formatted contents of the record within the window.
+If you want to multiple records such as search results at the same
+time, use lsdb-display-records<f> instead.
+
+.. Internal Data Model
+. : lsdb-hash-table
+lsdb-hash-table is the variable which holds all the records in LSDB.
+We can operate on this variable in similar fashion to CL's hash-table.
+
+lsdb-puthash for puthash, lsdb-gethash to gethash, lsdh-maphash to
+maphash are allowed to use.  For example, you can write the following
+expression to get the record for "Daiki Ueno":
+
+(lsdb-gethash "Daiki Ueno" lsdb-hash-table)
+
+=>
+
+((last-modified . "2002-04-23")
+ (creation-date . "2002-04-26")
+ (net "ueno@unixuser.org")
+ (mailing-list "emacs-mime-ja")
+ (attribution . "DU")
+ (user-agent "T-gnus/6.15.6 (based on Oort Gnus v0.06) (revision 03)"))
+
+.* Local emacs vars.
+The following `outline-layout' local variable setting:
+  - closes all topics from the first topic to just before the third-to-last,
+  - shows the children of the third to last (config vars)
+  - and the second to last (code section),
+  - and closes the last topic (this local-variables section).
+Local variables:
+outline-layout: (0 : -1 -1 0)
+End:
