@@ -33,7 +33,7 @@ package:
 install-package:	package
 	$(XEMACS) $(FLAGS) -f install-lsdb-package $(PACKAGEDIR)
 
-ChangeLog:
+ChangeLog: $(filter-out ChangeLog CVS, $(wildcard *))
 	cvs2cl --prune --no-wrap --usermap ./cvs2cl/usermap --gmt --stdout | \
 	ruby -p -i ./cvs2cl/fmtlog.rb > $@
 
