@@ -259,11 +259,14 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	(read-from-string "#s(hash-table)")
 	(defun lsdb-load-file (file)
 	  "Read the contents of FILE into a hash table."
-	  (save-excursion
-	    (set-buffer (find-file-noselect file))
-	    (re-search-forward "^#s")
-	    (beginning-of-line)
-	    (read (point-min-marker)))))
+	  (let ((buffer (find-file-noselect file)))
+	    (unwind-protect
+		(save-excursion
+		  (set-buffer buffer)
+		  (re-search-forward "^#s")
+		  (beginning-of-line)
+		  (read (point-min-marker)))
+	      (kill-buffer buffer)))))
     (invalid-read-syntax
     (defun lsdb-load-file (file)
       "Read the contents of FILE into a hash table."
@@ -688,9 +691,10 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (interactive)
   (if (not lsdb-hash-table-is-dirty)
       (message "(No changes need to be saved)")
-    (if (or (interactive-p)
-	    (y-or-n-p "Save the LSDB now?"))
-	(lsdb-save-file lsdb-file lsdb-hash-table))))
+    (when (or (interactive-p)
+	      (y-or-n-p "Save the LSDB now?"))
+      (lsdb-save-file lsdb-file lsdb-hash-table)
+      (setq lsdb-hash-table-is-dirty nil))))
 
 ;;;_ : Edit Forms -- stolen (and renamed) from gnus-eform.el
 (defvar lsdb-edit-form-buffer "*LSDB edit form*")
