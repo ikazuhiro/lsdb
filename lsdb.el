@@ -53,7 +53,7 @@
 ;;;             (define-key mew-draft-header-map "\M-I" 'lsdb-complete-name)))
 ;;; (add-hook 'mew-summary-mode-hook
 ;;;           (lambda ()
-;;;             (define-key mew-summary-mode-map "l" 'lsdb-toggle-buffer)))
+;;;             (define-key mew-summary-mode-map "L" 'lsdb-toggle-buffer)))
 
 ;;; Code:
 
