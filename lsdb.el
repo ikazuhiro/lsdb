@@ -466,6 +466,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defun lsdb-complete-name ()
   "Complete the user full-name or net-address before point"
   (interactive)
+  (lsdb-maybe-load-file)
   (let* ((start
 	  (save-excursion
 	    (re-search-backward "\\(\\`\\|[\n:,]\\)[ \t]*")
