@@ -1593,7 +1593,8 @@ always hide."
 			   (or (save-excursion
 				 (if (buffer-live-p wl-current-summary-buffer)
 				     (set-buffer wl-current-summary-buffer))
-				 (get-buffer-window wl-message-buffer))
+				 (and wl-message-buffer
+				      (get-buffer-window wl-message-buffer)))
 			       (get-largest-window)))
 			  (split-window-vertically)))))
 	(set-window-buffer window buffer)
