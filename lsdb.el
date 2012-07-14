@@ -111,6 +111,7 @@ where the last three elements are optional."
 
 (defcustom lsdb-entry-type-alist
   '((net 5 ?,)
+    (obsolete-net 4 ?,)
     (creation-date 2 ?. t)
     (last-modified 3 ?. t)
     (mailing-list 4 ?,)
@@ -611,12 +612,14 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (lsdb-gethash (nth 1 sender) lsdb-address-cache))
 
 (defun lsdb-update-address-cache (record)
-  (let ((net (cdr (assq 'net record))))
+  (let ((net (delq nil (append (cdr (assq 'net record))
+			       (cdr (assq 'obsolete-net record))))))
     (while net
       (lsdb-puthash (pop net) (car record) lsdb-address-cache))))
 
 (defun lsdb-delete-address-cache (record)
-  (let ((net (cdr (assq 'net record))))
+  (let ((net (delq nil (append (cdr (assq 'net record))
+			       (cdr (assq 'obsolete-net record))))))
     (while net
       (lsdb-remhash (pop net) lsdb-address-cache))))
 
@@ -650,7 +653,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 		     "\\>")
 		    key)
 		   ;; Don't assume that we are using address cache.
-		   (member (nth 1 sender) (cdr (assq 'net value))))
+		   (member (nth 1 sender) (cdr (assq 'net value)))
+		   (member (nth 1 sender) (cdr (assq 'obsolete-net value))))
 	       (throw 'found key))
 	   (setq names (cdr names))))
        lsdb-hash-table))))
@@ -773,6 +777,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	      (setcdr entry (nconc (cdr entry) list)))
 	  (setcdr entry (cdr (car new))))))
     (setq new (cdr new)))
+  ;; Remove obsolete address from net entry.
+  (let ((net (cdr (assq 'net old)))
+	(obsolete (cdr (assq 'obsolete-net old))))
+    (while (and obsolete net)
+      (if (member (car obsolete) net)
+	  (setq net (delete (car obsolete) net)))
+      (setq obsolete (cdr obsolete)))
+    (setq old (cons (cons 'net net)
+		    (delq (assq 'net old) old))))
   old)
 
 ;;;_. Display Management
@@ -806,7 +819,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	  (lsdb-hide-buffer))
       (catch 'lsdb-show-record
 	(while records
-	  (if (member user-mail-address (cdr (assq 'net (car records))))
+	  (if (or (member user-mail-address (cdr (assq 'net (car records))))
+		  (member user-mail-address (cdr (assq 'obsolete-net
+						       (car records)))))
 	      (setq records (cdr records))
 	    (lsdb-display-record (car records))
 	    (throw 'lsdb-show-record t)))
@@ -887,7 +902,8 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (autoload 'migemo-get-pattern "migemo"))
 
 (defun lsdb-complete-name-highlight (start end)
-  (make-local-hook 'pre-command-hook)
+  (when (functionp 'make-local-hook)
+    (make-local-hook 'pre-command-hook))
   (add-hook 'pre-command-hook 'lsdb-complete-name-highlight-update nil t)
   (save-excursion
     (goto-char start)
@@ -1068,7 +1084,8 @@ Modify whole identification by side effect."
       (font-lock-set-defaults)
     (set (make-local-variable 'font-lock-defaults)
 	 '(lsdb-font-lock-keywords t)))
-  (make-local-hook 'post-command-hook)
+  (when (functionp 'make-local-hook)
+    (make-local-hook 'post-command-hook))
   (add-hook 'post-command-hook 'lsdb-modeline-update nil t)
   (make-local-variable 'lsdb-modeline-string)
   (setq mode-line-buffer-identification
