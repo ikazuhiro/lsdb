@@ -953,15 +953,28 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
        (lambda (key value)
 	 (setq lsdb-last-candidates
 	       (nconc lsdb-last-candidates
-		      (delq nil (mapcar
-				 (lambda (candidate)
-				   (if (string-match pattern candidate)
-				       candidate))
-				 (if lsdb-strip-address
-				     (cdr (assq 'net value))
-				   (append (cdr (assq 'net value))
-					   (cdr (assq 'sender value)))))))))
+		      (if (string-match pattern key)
+			  ;; Record's name is matched.
+			  (mapcar
+			   (lambda (candidate)
+			     (concat key " <" candidate ">"))
+			   (cdr (assq 'net value)))
+			(mapcar
+			 (lambda (candidate)
+			   (if (string-match pattern candidate)
+			       (concat key " <" candidate ">")))
+			 (cdr (assq 'net value))))
+		      (unless lsdb-strip-address
+			(mapcar
+			 (lambda (candidate)
+			   (if (string-match pattern candidate)
+			       candidate))
+			 (cdr (assq 'sender value)))))))
        lsdb-hash-table)
+      (setq lsdb-last-candidates (delq nil lsdb-last-candidates))
+      (let ((tmp lsdb-last-candidates))
+	(while tmp 
+	  (setq tmp (setcdr tmp (delete (car tmp) (cdr tmp))))))
       ;; Sort candidates by the position where the pattern occurred.
       (setq lsdb-last-candidates
 	    (sort lsdb-last-candidates
