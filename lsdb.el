@@ -136,7 +136,7 @@ entry cannot be modified."
   :group 'lsdb
   :type 'list)
 
-(defcustom lsdb-decode-field-body-function #'lsdb-decode-field-body
+(defcustom lsdb-decode-field-body-function #'mime-decode-field-body
   "Field body decoder."
   :group 'lsdb
   :type 'function)
@@ -568,20 +568,6 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 			   (car components))
 		  (nth 1 components))
 	  (list (nth 1 components) (nth 1 components))))))
-
-;; stolen (and renamed) from nnheader.el
-(defun lsdb-decode-field-body (field-body field-name
-					  &optional mode max-column)
-  (let ((multibyte enable-multibyte-characters))
-    (unwind-protect
-	(progn
-	  (set-buffer-multibyte t)
-	  (mime-decode-field-body field-body
-				  (if (stringp field-name)
-				      (intern (capitalize field-name))
-				    field-name)
-				  mode max-column))
-      (set-buffer-multibyte multibyte))))
 
 ;;;_. Record Management
 (defun lsdb-rebuild-secondary-hash-tables (&optional force)
