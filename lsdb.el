@@ -572,16 +572,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 ;; stolen (and renamed) from nnheader.el
 (defun lsdb-decode-field-body (field-body field-name
 					  &optional mode max-column)
-  (let ((multibyte enable-multibyte-characters))
-    (unwind-protect
-	(progn
-	  (set-buffer-multibyte t)
-	  (mime-decode-field-body field-body
-				  (if (stringp field-name)
-				      (intern (capitalize field-name))
-				    field-name)
-				  mode max-column))
-      (set-buffer-multibyte multibyte))))
+  ;; mime-decode-field-body calls decode-mime-charset-string which
+  ;; requires multibyte buffer.
+  (with-temp-buffer
+    (set-buffer-multibyte t)
+    (mime-decode-field-body field-body
+			    (if (stringp field-name)
+				(intern (capitalize field-name))
+			      field-name)
+			    mode max-column)))
 
 ;;;_. Record Management
 (defun lsdb-rebuild-secondary-hash-tables (&optional force)
