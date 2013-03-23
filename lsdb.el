@@ -136,7 +136,10 @@ entry cannot be modified."
   :group 'lsdb
   :type 'list)
 
-(defcustom lsdb-decode-field-body-function #'lsdb-decode-field-body
+(defcustom lsdb-decode-field-body-function
+  (static-if (fboundp 'mime-charset-decode-string)
+      #'mime-decode-field-body
+    #'lsdb-decode-field-body)
   "Field body decoder."
   :group 'lsdb
   :type 'function)
