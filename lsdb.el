@@ -663,25 +663,24 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 
 ;;;_ : Update Records
 (defun lsdb-update-record (sender &optional interesting)
-  (let ((old (lsdb-gethash (car sender) lsdb-hash-table))
-	(new (if (nth 1 sender)
-		 (cons (cons 'net (list (nth 1 sender)))
-		       interesting)
-	       interesting))
-	merged
-	record
-	full-name)
+  (let* ((full-name (lsdb-lookup-full-name-from-address-cache sender))
+	 (old (lsdb-gethash (or full-name (car sender)) lsdb-hash-table))
+	 (new (if (nth 1 sender)
+		  (cons (cons 'net (list (nth 1 sender)))
+			interesting)
+		interesting))
+	 merged
+	 record)
     ;; Look for the existing record from the reverse hash table.
     ;; If it is found, regsiter the current full-name as AKA.
-    (unless old
-      (setq full-name
-	    (run-hook-with-args-until-success
-	     'lsdb-lookup-full-name-functions
-	     sender))
-      (when full-name
-	(setq old (lsdb-gethash full-name lsdb-hash-table)
-	      new (cons (list 'aka (car sender)) new))
-	(setcar sender full-name)))
+    (when (and (null old)
+	       (setq full-name (run-hook-with-args-until-success
+				'lsdb-lookup-full-name-functions
+				sender)))
+      (setq old (lsdb-gethash full-name lsdb-hash-table)))
+    (when (and full-name (null (equal full-name (car sender))))
+      (setq new (cons (list 'aka (car sender)) new))
+      (setcar sender full-name))
     (unless old
       (setq new (cons (cons 'creation-date (format-time-string "%Y-%m-%d"))
 		      new)))
