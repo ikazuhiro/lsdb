@@ -355,7 +355,12 @@ It represents address to full-name mapping.")
   "Flag to indicate whether the internal hash tables need to be saved.")
 
 (defvar lsdb-known-entry-names
-  (make-vector 29 0)
+  (let ((vector (make-vector 29 0)))
+    (mapcar
+     (lambda (name)
+       (intern (capitalize (symbol-name (car name))) vector))
+     lsdb-entry-type-alist)
+    vector)
   "An obarray used to complete an entry name.")
 
 (defvar lsdb-temp-buffer-show-function
