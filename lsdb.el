@@ -931,6 +931,22 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (remove-hook 'pre-command-hook
 		 'lsdb-complete-name-highlight-update t)))
 
+(defun lsdb-record-matched-value (regexp key value &optional entry-name)
+  (if entry-name
+      (progn
+	(setq value (cdr (assq entry-name value))
+	      key nil)
+	(unless (listp value)
+	  (setq value (list value)))
+	(while value
+	  (when (string-match regexp (car value))
+	    (setq key (car value)
+		  value nil))
+	  (setq value (cdr value)))
+	key)
+    (or (and (string-match regexp key) key)
+	(lsdb-record-matched-value regexp key value 'aka))))
+
 ;;;_ : Name Completion
 (defun lsdb-complete-name ()
   "Complete the user full-name or net-address before point"
@@ -958,9 +974,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (let (matched)
 	(lsdb-maphash
 	 (lambda (key value)
-	   (setq matched
-		 (string-match pattern key)
-		 key
+	   (when (setq matched (lsdb-record-matched-value pattern key value))
+	     (setq key matched))
+	   (setq key
 		 (if (and (string-match
 			   (eval-when-compile
 			     (concat "[" std11-special-char-list "]"))
@@ -1432,21 +1448,9 @@ If the optional 2nd argument ENTRY-NAME is given, matching only
 performed against the entry field."
   (let (records)
     (lsdb-maphash
-     (if entry-name
-	 (progn
-	   (lambda (key value)
-	     (let ((entry (cdr (assq entry-name value)))
-		   found)
-	       (unless (listp entry)
-		 (setq entry (list entry)))
-	       (while (and (not found) entry)
-		 (if (string-match regexp (pop entry))
-		     (setq found t)))
-	       (if found
-		   (push (cons key value) records)))))
-       (lambda (key value)
-	 (if (string-match regexp key)
-	     (push (cons key value) records))))
+     (lambda (key value)
+       (when (lsdb-record-matched-value regexp key value entry-name)
+	 (push (cons key value) records)))
      lsdb-hash-table)
     records))
 
