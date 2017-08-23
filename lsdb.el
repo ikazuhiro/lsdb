@@ -954,15 +954,15 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (lsdb-maybe-load-hash-tables)
   (unless (markerp lsdb-complete-marker)
     (setq lsdb-complete-marker (make-marker)))
-  (let* ((start
-	  (or (and (eq (marker-buffer lsdb-complete-marker) (current-buffer))
-		   (marker-position lsdb-complete-marker))
-	      (save-excursion
-		(re-search-backward "\\(\\`\\|[\n:,]\\)[ \t]*")
-		(set-marker lsdb-complete-marker (match-end 0)))))
-	 pattern
-	 (case-fold-search t)
-	 (completion-ignore-case t))
+  (let ((start
+	 (or (and (eq (marker-buffer lsdb-complete-marker) (current-buffer))
+		  (marker-position lsdb-complete-marker))
+	     (save-excursion
+	       (re-search-backward "\\(\\`\\|[\n:,]\\)[ \t]*")
+	       (set-marker lsdb-complete-marker (match-end 0)))))
+	pattern
+	(case-fold-search t)
+	(completion-ignore-case t))
     (unless (eq last-command this-command)
       (setq lsdb-last-candidates nil
 	    lsdb-last-candidates-pointer nil
@@ -1012,10 +1012,9 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
       (setq lsdb-last-candidates
 	    (sort lsdb-last-candidates
 		  (lambda (cand1 cand2)
-		    (< (if (string-match pattern cand1)
-			   (match-beginning 0))
-		       (if (string-match pattern cand2)
-			   (match-beginning 0)))))))
+		    ;; string-match should succeed.
+		    (< (string-match pattern cand1)
+		       (string-match pattern cand2))))))
     (unless lsdb-last-candidates-pointer
       (setq lsdb-last-candidates-pointer lsdb-last-candidates))
     (when lsdb-last-candidates-pointer
