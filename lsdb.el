@@ -356,7 +356,7 @@ It represents address to full-name mapping.")
 
 (defvar lsdb-known-entry-names
   (let ((vector (make-vector 29 0)))
-    (mapcar
+    (mapc
      (lambda (name)
        (intern (capitalize (symbol-name (car name))) vector))
      lsdb-entry-type-alist)
@@ -488,8 +488,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
   (let ((buffer (find-file-noselect lsdb-file))
 	tables)
     (unwind-protect
-	(save-excursion
-	  (set-buffer buffer)
+	(with-current-buffer buffer
 	  (goto-char (point-min))
 	  (re-search-forward "^#s(")
 	  (goto-char (match-beginning 0))
@@ -1214,8 +1213,7 @@ Modify whole identification by side effect."
      nil "Editing the entry."
      `(lambda (form)
 	(when form
-	  (save-excursion
-	    (set-buffer lsdb-buffer-name)
+	  (with-current-buffer lsdb-buffer-name
 	    (goto-char ,marker)
 	    (let ((record (lsdb-current-record))
 		  (inhibit-read-only t)
@@ -1608,8 +1606,7 @@ of the buffer."
 (eval-when-compile
   (autoload 'wl-message-get-original-buffer "wl-message"))
 (defun lsdb-wl-update-record ()
-  (save-excursion
-    (set-buffer (wl-message-get-original-buffer))
+  (with-current-buffer (wl-message-get-original-buffer)
     (let ((lsdb-temp-buffer-show-function
 	   #'lsdb-wl-temp-buffer-show-function))
       (lsdb-update-records-and-display))))
@@ -1697,8 +1694,7 @@ always hide."
 	 (msg (mew-current-get-msg (mew-frame-id)))
 	 (cache (mew-cache-hit fld msg)))
     (when cache
-      (save-excursion
-	(set-buffer cache)
+      (with-current-buffer cache
 	(unless (or (mew-xinfo-get-decode-err) (mew-xinfo-get-action))
 	  (make-local-variable 'lsdb-decode-field-body-function)
 	  (setq lsdb-decode-field-body-function
@@ -1834,8 +1830,7 @@ the user wants it."
 
 (defun lsdb-insert-x-face-image (data type marker)
   (static-if (featurep 'xemacs)
-      (save-excursion
-	(set-buffer (marker-buffer marker))
+      (with-current-buffer (marker-buffer marker)
 	(goto-char marker)
 	(let* ((inhibit-read-only t)
 	       buffer-read-only
@@ -1843,8 +1838,7 @@ the user wants it."
 	  (set-extent-begin-glyph
 	   (make-extent (point) (point))
 	   glyph)))
-    (save-excursion
-      (set-buffer (marker-buffer marker))
+    (with-current-buffer (marker-buffer marker)
       (goto-char marker)
       (let* ((inhibit-read-only t)
 	     buffer-read-only
@@ -1884,8 +1878,7 @@ the user wants it."
       (set-process-filter
        process
        `(lambda (process string)
-	  (save-excursion
-	    (set-buffer ,buffer)
+	  (with-current-buffer ,buffer
 	    (goto-char (point-max))
 	    (insert string))))
       (set-process-sentinel
@@ -1940,8 +1933,7 @@ the user wants it."
 
 (defun lsdb-insert-face-image (data type marker)
   (static-if (featurep 'xemacs)
-      (save-excursion
-	(set-buffer (marker-buffer marker))
+      (with-current-buffer (marker-buffer marker)
 	(goto-char marker)
 	(let* ((inhibit-read-only t)
 	       buffer-read-only
@@ -1949,8 +1941,7 @@ the user wants it."
 	  (set-extent-begin-glyph
 	   (make-extent (point) (point))
 	   glyph)))
-    (save-excursion
-      (set-buffer (marker-buffer marker))
+    (with-current-buffer (marker-buffer marker)
       (goto-char marker)
       (let* ((inhibit-read-only t)
 	     buffer-read-only
@@ -1991,8 +1982,7 @@ the user wants it."
       (set-process-filter
        process
        `(lambda (process string)
-	  (save-excursion
-	    (set-buffer ,buffer)
+	  (with-current-buffer ,buffer
 	    (goto-char (point-max))
 	    (insert string))))
       (set-process-sentinel
