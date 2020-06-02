@@ -57,8 +57,6 @@
 
 ;;; Code:
 
-(require 'poem)
-(require 'pces)
 (require 'mime)
 (require 'static)
 
@@ -203,12 +201,8 @@ The compressed face will be piped to this command."
   :type 'list)
 
 (defcustom lsdb-insert-x-face-function
-  (if (static-if (featurep 'xemacs)
-	  (featurep 'xpm)
-	(and (>= emacs-major-version 21)
-	     (fboundp 'image-type-available-p)
-	     (or (image-type-available-p 'pbm)
-		 (image-type-available-p 'xpm))))
+  (if (or (image-type-available-p 'pbm)
+	  (image-type-available-p 'xpm))
       #'lsdb-insert-x-face-asynchronously)
   "Function to display X-Face."
   :group 'lsdb
@@ -235,13 +229,8 @@ The decoded field-body (actually a PNG data) will be piped to this command."
   :type 'list)
 
 (defcustom lsdb-insert-face-function
-  (if (static-if (featurep 'xemacs)
-	  (or (featurep 'png)
-	      (featurep 'xpm))
-	(and (>= emacs-major-version 21)
-	     (fboundp 'image-type-available-p)
-	     (or (image-type-available-p 'png)
-		 (image-type-available-p 'xpm))))
+  (if (or (image-type-available-p 'png)
+	  (image-type-available-p 'xpm))
       #'lsdb-insert-face-asynchronously)
   "Function to display Face."
   :group 'lsdb
@@ -380,62 +369,13 @@ Overrides `temp-buffer-show-function'.")
     program))
 
 ;;;_. Hash Table Emulation
-(if (and (fboundp 'make-hash-table)
-	 (subrp (symbol-function 'make-hash-table)))
-    (progn
-      (defalias 'lsdb-puthash 'puthash)
-      (defalias 'lsdb-gethash 'gethash)
-      (defalias 'lsdb-remhash 'remhash)
-      (defalias 'lsdb-maphash 'maphash)
-      (defalias 'lsdb-hash-table-size 'hash-table-size)
-      (defalias 'lsdb-hash-table-count 'hash-table-count)
-      (defalias 'lsdb-make-hash-table 'make-hash-table))
-  (defun lsdb-puthash (key value hash-table)
-    "Hash KEY to VALUE in HASH-TABLE."
-    ;; Obarray is regarded as an open hash table, as a matter of
-    ;; fact, rehashing doesn't make sense.
-    (let (new-obarray)
-      (when (> (car hash-table)
-	       (* (length (nth 1 hash-table)) 0.7))
-	(setq new-obarray (make-vector (* (length (nth 1 hash-table)) 2) 0))
-	(mapatoms
-	 (lambda (symbol)
-	   (set (intern (symbol-name symbol) new-obarray)
-		(symbol-value symbol)))
-	 (nth 1 hash-table))
-	(setcdr hash-table (list new-obarray)))
-      (set (intern key (nth 1 hash-table)) value)
-      (setcar hash-table (1+ (car hash-table)))))
-  (defun lsdb-gethash (key hash-table &optional default)
-    "Find hash value for KEY in HASH-TABLE.
-If there is no corresponding value, return DEFAULT (which defaults to nil)."
-    (let ((symbol (intern-soft key (nth 1 hash-table))))
-      (if symbol
-	  (symbol-value symbol)
-	default)))
-  (defun lsdb-remhash (key hash-table)
-    "Remove the entry for KEY from HASH-TABLE.
-Do nothing if there is no entry for KEY in HASH-TABLE."
-    (unintern key (nth 1 hash-table))
-    (setcar hash-table (1- (car hash-table))))
-  (defun lsdb-maphash (function hash-table)
-    "Map FUNCTION over entries in HASH-TABLE, calling it with two args,
-each key and value in HASH-TABLE.
-
-FUNCTION may not modify HASH-TABLE, with the one exception that FUNCTION
-may remhash or puthash the entry currently being processed by FUNCTION."
-    (mapatoms
-     (lambda (symbol)
-       (funcall function (symbol-name symbol) (symbol-value symbol)))
-     (nth 1 hash-table)))
-  (defun lsdb-hash-table-size (hash-table)
-    "Return the size of HASH-TABLE.
-This is the current number of slots in HASH-TABLE, whether occupied or not."
-    (length (nth 1 hash-table)))
-  (defalias 'lsdb-hash-table-count 'car)
-  (defun lsdb-make-hash-table (&rest args)
-    "Return a new empty hash table object."
-    (list 0 (make-vector (or (plist-get args :size) 29) 0))))
+(defalias 'lsdb-puthash 'puthash)
+(defalias 'lsdb-gethash 'gethash)
+(defalias 'lsdb-remhash 'remhash)
+(defalias 'lsdb-maphash 'maphash)
+(defalias 'lsdb-hash-table-size 'hash-table-size)
+(defalias 'lsdb-hash-table-count 'hash-table-count)
+(defalias 'lsdb-make-hash-table 'make-hash-table)
 
 ;;;_. Hash Table Reader/Writer
 (defconst lsdb-secondary-hash-table-start-format
@@ -444,44 +384,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 (defsubst lsdb-secondary-hash-table-start (hash-table)
   (format lsdb-secondary-hash-table-start-format hash-table))
 
-(eval-and-compile
-  (condition-case nil
-      (and
-       ;; In XEmacs, hash tables can also be created by the lisp reader
-       ;; using structure syntax.
-       (read-from-string "#s(hash-table)")
-       (defalias 'lsdb-read 'read))
-    (invalid-read-syntax
-     (defun lsdb-read (&optional marker)
-       "Read one Lisp expression as text from MARKER, return as Lisp object."
-       (save-excursion
-	 (goto-char marker)
-	 (if (looking-at "^#s(")
-	     (let ((end-marker
-		    (progn
-		      (forward-char 2)	;skip "#s"
-		      (forward-sexp)	;move to the left paren
-		      (point-marker))))
-	       (with-temp-buffer
-		 (buffer-disable-undo)
-		 (insert-buffer-substring (marker-buffer marker)
-					  marker end-marker)
-		 (goto-char (point-min))
-		 (delete-char 2)
-		 (let ((object (read (current-buffer)))
-		       hash-table data)
-		   (if (eq 'hash-table (car object))
-		       (progn
-			 (setq hash-table
-			       (lsdb-make-hash-table
-				:size (plist-get (cdr object) 'size)
-				:test 'equal)
-			       data (plist-get (cdr object) 'data))
-			 (while data
-			   (lsdb-puthash (pop data) (pop data) hash-table))
-			 hash-table)
-		     object))))
-	   (read marker)))))))
+(defalias 'lsdb-read 'read)
 
 (defun lsdb-load-hash-tables ()
   "Read the contents of `lsdb-file' into the internal hash tables."
@@ -528,11 +431,7 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
 	       lsdb-file-coding-system)
 	  (let ((coding-system-name
 		 (if (symbolp lsdb-file-coding-system)
-		     (symbol-name lsdb-file-coding-system)
-		   ;; XEmacs
-		   (static-if (featurep 'xemacs)
-		       (symbol-name (coding-system-name
-				     lsdb-file-coding-system))))))
+		     (symbol-name lsdb-file-coding-system))))
 	    (if coding-system-name
 		(insert ";;; -*- mode: emacs-lisp; coding: "
 			coding-system-name " -*-\n"))))
@@ -918,9 +817,11 @@ This is the current number of slots in HASH-TABLE, whether occupied or not."
     (setq lsdb-last-highlight-overlay
 	  (make-overlay (match-beginning 0) (match-end 0)))
     (overlay-put lsdb-last-highlight-overlay 'face
-		 (or (find-face 'isearch-secondary)
-		     (find-face 'isearch-lazy-highlight-face)
-		     'underline))))
+		 (catch 'done
+		   (dolist (sym '(isearch-secondary
+				  isearch-lazy-highlight-face
+				  underline))
+		     (when (facep sym) (throw 'done sym)))))))
 
 (defun lsdb-complete-name-highlight-update ()
   (unless (eq this-command 'lsdb-complete-name)
@@ -1047,55 +948,21 @@ static char * lsdb_pointer_xpm[] = {
 \"              \",
 \"              \"};")
 
-(static-if (featurep 'xemacs)
-    (progn
-      (defvar lsdb-xemacs-modeline-left-extent
-	(copy-extent modeline-buffer-id-left-extent))
-
-      (defvar lsdb-xemacs-modeline-right-extent
-	(copy-extent modeline-buffer-id-right-extent))
-
-      (defun lsdb-modeline-buffer-identification (line)
-	"Decorate 1st element of `mode-line-buffer-identification' LINE.
+(defun lsdb-modeline-buffer-identification (line)
+"Decorate 1st element of `mode-line-buffer-identification' LINE.
 Modify whole identification by side effect."
-	(let ((id (car line)) chopped)
-	  (if (and (stringp id) (string-match "^LSDB:" id))
-	      (progn
-		(setq chopped (substring id 0 (match-end 0))
-		      id (substring id (match-end 0)))
-		(nconc
-		 (list
-		  (let ((glyph
-			 (make-glyph
-			  (nconc
-			   (if (featurep 'xpm)
-			       (list (vector 'xpm :data lsdb-pointer-xpm)))
-			   (list (vector 'string :data chopped))))))
-		    (set-glyph-face glyph 'modeline-buffer-id)
-		    (cons lsdb-xemacs-modeline-left-extent glyph))
-		  (cons lsdb-xemacs-modeline-right-extent id))
-		 (cdr line)))
-	    line))))
-  (condition-case nil
-      (progn
-	(require 'image)
-	(defun lsdb-modeline-buffer-identification (line)
-	  "Decorate 1st element of `mode-line-buffer-identification' LINE.
-Modify whole identification by side effect."
-	  (let ((id (copy-sequence (car line)))
-		(image
-		 (if (image-type-available-p 'xpm)
-		     (create-image lsdb-pointer-xpm 'xpm t :ascent 'center))))
-	    (when (and image
-		       (stringp id) (string-match "^LSDB:" id))
-	      (add-text-properties 0 (length id)
-				   (list 'display image
-					 'rear-nonsticky (list 'display))
-				   id)
-	      (setcar line id))
-	    line)))
-    (error
-     (defalias 'lsdb-modeline-buffer-identification 'identity))))
+(let ((id (copy-sequence (car line)))
+      (image
+       (if (image-type-available-p 'xpm)
+	   (create-image lsdb-pointer-xpm 'xpm t :ascent 'center))))
+  (when (and image
+	     (stringp id) (string-match "^LSDB:" id))
+    (add-text-properties 0 (length id)
+			 (list 'display image
+			       'rear-nonsticky (list 'display))
+			 id)
+    (setcar line id))
+  line))
 
 (defvar lsdb-mode-map
   (let ((keymap (make-sparse-keymap)))
@@ -1122,12 +989,8 @@ Modify whole identification by side effect."
 (define-derived-mode lsdb-mode fundamental-mode "LSDB"
   "Major mode for browsing LSDB records."
   (setq buffer-read-only t)
-  (static-if (featurep 'xemacs)
-      ;; In XEmacs, setting `font-lock-defaults' only affects on
-      ;; `find-file-hooks'.
-      (font-lock-set-defaults)
-    (set (make-local-variable 'font-lock-defaults)
-	 '(lsdb-font-lock-keywords t)))
+  (set (make-local-variable 'font-lock-defaults)
+       '(lsdb-font-lock-keywords t))
   (when (functionp 'make-local-hook)
     (make-local-hook 'post-command-hook))
   (add-hook 'post-command-hook 'lsdb-modeline-update nil t)
@@ -1372,10 +1235,10 @@ then the name of this record will be edited."
   (if (not (or force
 	       lsdb-hash-tables-are-dirty))
       (message "(No changes need to be saved)")
-    (when (or (interactive-p)		;Don't ask user if this
-					;function is called as a
-					;command.
+    (when (or (called-interactively-p 'interactive)
 	      (not lsdb-verbose)
+	      ;; Don't ask user if this function is called as a
+	      ;; command.
 	      (y-or-n-p "Save the LSDB now? "))
       (lsdb-save-hash-tables)
       (set-buffer-modified-p (setq lsdb-hash-tables-are-dirty nil))
@@ -1800,15 +1663,10 @@ the user wants it."
   (lsdb-make-hash-table :test 'equal))
 
 (defun lsdb-x-face-available-image-type ()
-  (static-if (featurep 'xemacs)
-      (if (featurep 'xpm)
-	  'xpm)
-    (and (>= emacs-major-version 21)
-	 (fboundp 'image-type-available-p)
-	 (if (image-type-available-p 'pbm)
-	     'pbm
-	   (if (image-type-available-p 'xpm)
-	       'xpm)))))
+  (if (image-type-available-p 'pbm)
+      'pbm
+    (if (image-type-available-p 'xpm)
+	'xpm)))
 
 (defun lsdb-expose-x-face ()
   (let* ((record (get-text-property (point-min) 'lsdb-record))
@@ -1829,25 +1687,16 @@ the user wants it."
        'lsdb-record record))))
 
 (defun lsdb-insert-x-face-image (data type marker)
-  (static-if (featurep 'xemacs)
-      (with-current-buffer (marker-buffer marker)
-	(goto-char marker)
-	(let* ((inhibit-read-only t)
-	       buffer-read-only
-	       (glyph (make-glyph (vector type :data data))))
-	  (set-extent-begin-glyph
-	   (make-extent (point) (point))
-	   glyph)))
-    (with-current-buffer (marker-buffer marker)
-      (goto-char marker)
-      (let* ((inhibit-read-only t)
-	     buffer-read-only
-	     (image (create-image data type t :ascent 'center))
-	     (record (get-text-property (point) 'lsdb-record)))
-	(put-text-property (point) (progn
-				     (insert-image image)
-				     (point))
-			   'lsdb-record record)))))
+  (with-current-buffer (marker-buffer marker)
+    (goto-char marker)
+    (let* ((inhibit-read-only t)
+	   buffer-read-only
+	   (image (create-image data type t :ascent 'center))
+	   (record (get-text-property (point) 'lsdb-record)))
+      (put-text-property (point) (progn
+				   (insert-image image)
+				   (point))
+			 'lsdb-record record))))
 
 (defun lsdb-insert-x-face-asynchronously (x-face)
   (let* ((type (or lsdb-x-face-image-type
@@ -1901,17 +1750,10 @@ the user wants it."
   (lsdb-make-hash-table :test 'equal))
 
 (defun lsdb-face-available-image-type ()
-  (static-if (featurep 'xemacs)
-      (if (featurep 'png)
-	  'png
-	(if (featurep 'xpm)
-	    'xpm))
-    (and (>= emacs-major-version 21)
-	 (fboundp 'image-type-available-p)
-	 (if (image-type-available-p 'png)
-	     'png
-	   (if (image-type-available-p 'xpm)
-	       'xpm)))))
+  (if (image-type-available-p 'png)
+      'png
+    (if (image-type-available-p 'xpm)
+	'xpm)))
 
 (defun lsdb-expose-face ()
   (let* ((record (get-text-property (point-min) 'lsdb-record))
@@ -1932,25 +1774,16 @@ the user wants it."
        'lsdb-record record))))
 
 (defun lsdb-insert-face-image (data type marker)
-  (static-if (featurep 'xemacs)
-      (with-current-buffer (marker-buffer marker)
-	(goto-char marker)
-	(let* ((inhibit-read-only t)
-	       buffer-read-only
-	       (glyph (make-glyph (vector type :data data))))
-	  (set-extent-begin-glyph
-	   (make-extent (point) (point))
-	   glyph)))
-    (with-current-buffer (marker-buffer marker)
-      (goto-char marker)
-      (let* ((inhibit-read-only t)
-	     buffer-read-only
-	     (image (create-image data type t :ascent 'center))
-	     (record (get-text-property (point) 'lsdb-record)))
-	(put-text-property (point) (progn
-				     (insert-image image)
-				     (point))
-			   'lsdb-record record)))))
+  (with-current-buffer (marker-buffer marker)
+    (goto-char marker)
+    (let* ((inhibit-read-only t)
+	   buffer-read-only
+	   (image (create-image data type t :ascent 'center))
+	   (record (get-text-property (point) 'lsdb-record)))
+      (put-text-property (point) (progn
+				   (insert-image image)
+				   (point))
+			 'lsdb-record record))))
 
 (defun lsdb-insert-face-asynchronously (face)
   (let* ((type (or lsdb-face-image-type
