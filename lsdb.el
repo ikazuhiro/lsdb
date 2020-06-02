@@ -1,4 +1,4 @@
-;;; lsdb.el --- the Lovely Sister Database
+;;; lsdb.el --- the Lovely Sister Database  -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2002 Daiki Ueno
 
@@ -1561,7 +1561,7 @@ always hide."
 	(unless (or (mew-xinfo-get-decode-err) (mew-xinfo-get-action))
 	  (make-local-variable 'lsdb-decode-field-body-function)
 	  (setq lsdb-decode-field-body-function
-		(lambda (body name)
+		(lambda (body _name)
 		  (set-text-properties 0 (length body) nil body)
 		  body))
 	  (lsdb-update-records-and-display))))))
