@@ -368,15 +368,6 @@ Overrides `temp-buffer-show-function'.")
 	  (setcar pointer value)))
     program))
 
-;;;_. Hash Table Emulation
-(defalias 'lsdb-puthash 'puthash)
-(defalias 'lsdb-gethash 'gethash)
-(defalias 'lsdb-remhash 'remhash)
-(defalias 'lsdb-maphash 'maphash)
-(defalias 'lsdb-hash-table-size 'hash-table-size)
-(defalias 'lsdb-hash-table-count 'hash-table-count)
-(defalias 'lsdb-make-hash-table 'make-hash-table)
-
 ;;;_. Hash Table Reader/Writer
 (defconst lsdb-secondary-hash-table-start-format
   ";;; %S\n")
@@ -412,9 +403,9 @@ Overrides `temp-buffer-show-function'.")
 	  ;; Reduce the actual size of the close hash table, because
 	  ;; XEmacs doesn't have a distinction between index-size and
 	  ;; hash-table-size.
-	  (number-to-string (lsdb-hash-table-count hash-table))
+	  (number-to-string (hash-table-count hash-table))
 	  " test equal data (\n")
-  (lsdb-maphash
+  (maphash
    (lambda (key value)
      (let (print-level print-length)
        (insert (prin1-to-string key) " " (prin1-to-string value) "\n")))
@@ -493,11 +484,11 @@ Overrides `temp-buffer-show-function'.")
   (let ((tables lsdb-secondary-hash-tables))
     (while tables
       (when (or force (not (symbol-value (car tables))))
-	(set (car tables) (lsdb-make-hash-table :test 'equal))
+	(set (car tables) (make-hash-table :test 'equal))
 	(setq lsdb-hash-tables-are-dirty t))
       (setq tables (cdr tables))))
   (if lsdb-hash-tables-are-dirty
-      (lsdb-maphash
+      (maphash
        (lambda (key value)
 	 (run-hook-with-args
 	  'lsdb-after-update-record-functions
@@ -508,25 +499,25 @@ Overrides `temp-buffer-show-function'.")
   (unless lsdb-hash-table
     (if (file-exists-p lsdb-file)
 	(lsdb-load-hash-tables)
-      (setq lsdb-hash-table (lsdb-make-hash-table :test 'equal)))
+      (setq lsdb-hash-table (make-hash-table :test 'equal)))
     (lsdb-rebuild-secondary-hash-tables)))
 
 ;;;_ : Fallback Lookup Functions
 ;;;_  , #1 Address Cache
 (defun lsdb-lookup-full-name-from-address-cache (sender)
-  (lsdb-gethash (nth 1 sender) lsdb-address-cache))
+  (gethash (nth 1 sender) lsdb-address-cache))
 
 (defun lsdb-update-address-cache (record)
   (let ((net (delq nil (append (cdr (assq 'net record))
 			       (cdr (assq 'obsolete-net record))))))
     (while net
-      (lsdb-puthash (pop net) (car record) lsdb-address-cache))))
+      (puthash (pop net) (car record) lsdb-address-cache))))
 
 (defun lsdb-delete-address-cache (record)
   (let ((net (delq nil (append (cdr (assq 'net record))
 			       (cdr (assq 'obsolete-net record))))))
     (while net
-      (lsdb-remhash (pop net) lsdb-address-cache))))
+      (remhash (pop net) lsdb-address-cache))))
 
 ;;;_  , #2 Iterate on the All Records (very slow)
 (defun lsdb-lookup-full-name-by-fuzzy-matching (sender)
@@ -542,7 +533,7 @@ Overrides `temp-buffer-show-function'.")
 	   (list (car sender))))
 	(case-fold-search t))
     (catch 'found
-      (lsdb-maphash
+      (maphash
        (lambda (key value)
 	 (while names
 	   (if (or (string-match
@@ -567,7 +558,7 @@ Overrides `temp-buffer-show-function'.")
 ;;;_ : Update Records
 (defun lsdb-update-record (sender &optional interesting)
   (let* ((full-name (lsdb-lookup-full-name-from-address-cache sender))
-	 (old (lsdb-gethash (or full-name (car sender)) lsdb-hash-table))
+	 (old (gethash (or full-name (car sender)) lsdb-hash-table))
 	 (new (if (nth 1 sender)
 		  (cons (cons 'net (list (nth 1 sender)))
 			interesting)
@@ -580,7 +571,7 @@ Overrides `temp-buffer-show-function'.")
 	       (setq full-name (run-hook-with-args-until-success
 				'lsdb-lookup-full-name-functions
 				sender)))
-      (setq old (lsdb-gethash full-name lsdb-hash-table)))
+      (setq old (gethash full-name lsdb-hash-table)))
     (when (and full-name (null (equal full-name (car sender))))
       (setq new (cons (list 'aka (car sender)) new))
       (setcar sender full-name))
@@ -596,7 +587,7 @@ Overrides `temp-buffer-show-function'.")
 	    (setcdr entry last-modified)
 	  (setcdr record (cons (cons 'last-modified last-modified)
 			       (cdr record)))))
-      (lsdb-puthash (car record) (cdr record)
+      (puthash (car record) (cdr record)
 		    lsdb-hash-table)
       (run-hook-with-args 'lsdb-after-update-record-functions record)
       (setq lsdb-hash-tables-are-dirty t))
@@ -872,7 +863,7 @@ Overrides `temp-buffer-show-function'.")
 		pattern (concat "\\<\\(" lsdb-last-completion "\\)"))
 	(setq pattern (concat "\\<" (regexp-quote lsdb-last-completion))))
       (let (matched)
-	(lsdb-maphash
+	(maphash
 	 (lambda (key value)
 	   (when (setq matched (lsdb-record-matched-value pattern key value))
 	     (setq key matched))
@@ -1028,7 +1019,7 @@ Modify whole identification by side effect."
 
 (defun lsdb-delete-record (record)
   "Delete given RECORD."
-  (lsdb-remhash (car record) lsdb-hash-table)
+  (remhash (car record) lsdb-hash-table)
   (run-hook-with-args 'lsdb-after-delete-record-functions record)
   (setq lsdb-hash-tables-are-dirty t))
 
@@ -1056,7 +1047,7 @@ Modify whole identification by side effect."
 (defun lsdb-delete-entry (record entry)
   "Delete given ENTRY from RECORD."
   (setcdr record (delq entry (cdr record)))
-  (lsdb-puthash (car record) (cdr record)
+  (puthash (car record) (cdr record)
 		lsdb-hash-table)
   (run-hook-with-args 'lsdb-after-update-record-functions record)
   (setq lsdb-hash-tables-are-dirty t))
@@ -1082,7 +1073,7 @@ Modify whole identification by side effect."
 		  (inhibit-read-only t)
 		  buffer-read-only)
 	      (setcdr record (cons (cons ',entry-name form) (cdr record)))
-	      (lsdb-puthash (car record) (cdr record)
+	      (puthash (car record) (cdr record)
 			    lsdb-hash-table)
 	      (run-hook-with-args 'lsdb-after-update-record-functions record)
 	      (setq lsdb-hash-tables-are-dirty t)
@@ -1205,7 +1196,7 @@ then the entire entry will be deleted."
 	  (unless (equal new-name old-name)
 	    (lsdb-delete-record record)
 	    (setcar record new-name)
-	    (lsdb-puthash new-name (cdr record) lsdb-hash-table)
+	    (puthash new-name (cdr record) lsdb-hash-table)
 	    (run-hook-with-args 'lsdb-after-update-record-functions record)
 	    (setq lsdb-hash-tables-are-dirty t)
 	    (with-current-buffer lsdb-buffer-name
@@ -1307,7 +1298,7 @@ always hide."
 If the optional 2nd argument ENTRY-NAME is given, matching only
 performed against the entry field."
   (let (records)
-    (lsdb-maphash
+    (maphash
      (lambda (key value)
        (when (lsdb-record-matched-value regexp key value entry-name)
 	 (push (cons key value) records)))
@@ -1588,7 +1579,7 @@ always hide."
 	  (setcdr entry attribution)
 	(setcdr (car records) (cons (cons 'attribution attribution)
 				    (cdr (car records))))
-	(lsdb-puthash (car (car records)) (cdr (car records))
+	(puthash (car (car records)) (cdr (car records))
 		      lsdb-hash-table)
 	(run-hook-with-args 'lsdb-after-update-record-functions (car records))
 	(setq lsdb-hash-tables-are-dirty t)))))
@@ -1660,7 +1651,7 @@ the user wants it."
 
 ;;;_. X-Face Rendering
 (defvar lsdb-x-face-cache
-  (lsdb-make-hash-table :test 'equal))
+  (make-hash-table :test 'equal))
 
 (defun lsdb-x-face-available-image-type ()
   (if (image-type-available-p 'pbm)
@@ -1705,7 +1696,7 @@ the user wants it."
 	 (shell-command-switch lsdb-shell-command-switch)
 	 (coding-system-for-read 'binary)
 	 (process-connection-type nil)
-	 (cached (cdr (assq type (lsdb-gethash x-face lsdb-x-face-cache))))
+	 (cached (cdr (assq type (gethash x-face lsdb-x-face-cache))))
 	 (marker (point-marker))
 	 buffer
 	 process)
@@ -1739,7 +1730,7 @@ the user wants it."
 			 (with-current-buffer ,buffer
 			   (buffer-string))))
 		    (lsdb-insert-x-face-image data ',type ,marker)
-		    (lsdb-puthash ,x-face (list (cons ',type data))
+		    (puthash ,x-face (list (cons ',type data))
 				  lsdb-x-face-cache)))
 	    (kill-buffer ,buffer))))
       (process-send-string process (concat x-face "\n"))
@@ -1747,7 +1738,7 @@ the user wants it."
 
 ;;;_. Face Rendering
 (defvar lsdb-face-cache
-  (lsdb-make-hash-table :test 'equal))
+  (make-hash-table :test 'equal))
 
 (defun lsdb-face-available-image-type ()
   (if (image-type-available-p 'png)
@@ -1793,7 +1784,7 @@ the user wants it."
 	 (coding-system-for-read 'binary)
 	 (coding-system-for-write 'binary)
 	 (process-connection-type nil)
-	 (cached (cdr (assq type (lsdb-gethash face lsdb-face-cache))))
+	 (cached (cdr (assq type (gethash face lsdb-face-cache))))
 	 (marker (point-marker))
 	 buffer
 	 process)
@@ -1827,7 +1818,7 @@ the user wants it."
 			 (with-current-buffer ,buffer
 			   (buffer-string))))
 		    (lsdb-insert-face-image data ',type ,marker)
-		    (lsdb-puthash ,face (list (cons ',type data))
+		    (puthash ,face (list (cons ',type data))
 				  lsdb-face-cache)))
 	    (kill-buffer ,buffer))))
       (process-send-string process (base64-decode-string face))
