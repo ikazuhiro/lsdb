@@ -780,8 +780,6 @@ Overrides `temp-buffer-show-function'.")
   (autoload 'migemo-get-pattern "migemo"))
 
 (defun lsdb-complete-name-highlight (start end)
-  (when (functionp 'make-local-hook)
-    (make-local-hook 'pre-command-hook))
   (add-hook 'pre-command-hook 'lsdb-complete-name-highlight-update nil t)
   (save-excursion
     (goto-char start)
@@ -965,8 +963,6 @@ Modify whole identification by side effect."
   (setq buffer-read-only t)
   (set (make-local-variable 'font-lock-defaults)
        '(lsdb-font-lock-keywords t))
-  (when (functionp 'make-local-hook)
-    (make-local-hook 'post-command-hook))
   (add-hook 'post-command-hook 'lsdb-modeline-update nil t)
   (make-local-variable 'lsdb-modeline-string)
   (setq mode-line-buffer-identification
