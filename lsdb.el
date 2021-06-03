@@ -135,9 +135,7 @@ entry cannot be modified."
   :type 'list)
 
 (defcustom lsdb-decode-field-body-function
-  (static-if (fboundp 'mime-charset-decode-string)
-      #'mime-decode-field-body
-    #'lsdb-decode-field-body)
+  #'mime-decode-field-body
   "Field body decoder."
   :group 'lsdb
   :type 'function)
@@ -417,9 +415,7 @@ Overrides `temp-buffer-show-function'.")
   (let ((coding-system-for-write lsdb-file-coding-system)
 	tables)
     (with-temp-file lsdb-file
-      (if (and (or (featurep 'mule)
-		   (featurep 'file-coding))
-	       lsdb-file-coding-system)
+      (if lsdb-file-coding-system
 	  (let ((coding-system-name
 		 (if (symbolp lsdb-file-coding-system)
 		     (symbol-name lsdb-file-coding-system))))
@@ -465,19 +461,6 @@ Overrides `temp-buffer-show-function'.")
 			   (car components))
 		  (nth 1 components))
 	  (list (nth 1 components) (nth 1 components))))))
-
-;; stolen (and renamed) from nnheader.el
-(defun lsdb-decode-field-body (field-body field-name
-					  &optional mode max-column)
-  ;; mime-decode-field-body calls decode-mime-charset-string which
-  ;; requires multibyte buffer.
-  (with-temp-buffer
-    (set-buffer-multibyte t)
-    (mime-decode-field-body field-body
-			    (if (stringp field-name)
-				(intern (capitalize field-name))
-			      field-name)
-			    mode max-column)))
 
 ;;;_. Record Management
 (defun lsdb-rebuild-secondary-hash-tables (&optional force)
