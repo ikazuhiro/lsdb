@@ -1436,8 +1436,9 @@ of the buffer."
   (add-hook 'wl-exit-hook 'lsdb-mode-save)
   (add-hook 'wl-save-hook 'lsdb-mode-save))
 
-(eval-when-compile
-  (autoload 'wl-message-get-original-buffer "wl-message"))
+(autoload 'wl-message-get-original-buffer "wl-message")
+(declare-function wl-message-get-original-buffer "wl-message" ())
+
 (defun lsdb-wl-update-record ()
   (with-current-buffer (wl-message-get-original-buffer)
     (let ((lsdb-temp-buffer-show-function
