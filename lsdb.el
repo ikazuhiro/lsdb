@@ -192,7 +192,8 @@ If non-nil, supersedes the return value of `lsdb-x-face-available-image-type'."
 (defcustom lsdb-x-face-command-alist
   '((pbm "{ echo '/* Width=48, Height=48 */'; uncompface; } | icontopbm | pnmscale " scale-factor)
     (xpm "{ echo '/* Width=48, Height=48 */'; uncompface; } | icontopbm | pnmscale " scale-factor " | ppmtoxpm"))
-  "An alist from an image type to a command to be executed to display an X-Face header.
+  "An alist from an image type to a command to be executed to display
+an X-Face header.
 The command will be executed in a sub-shell asynchronously.
 The compressed face will be piped to this command."
   :group 'lsdb
@@ -220,7 +221,8 @@ If non-nil, supersedes the return value of `lsdb-x-face-available-image-type'."
 (defcustom lsdb-face-command-alist
   '((png "pngtopnm | pnmscale " scale-factor " | pnmtopng")
     (xpm "pngtopnm | pnmscale " scale-factor " | ppmtoxpm"))
-  "An alist from an image type to a command to be executed to display a Face header.
+  "An alist from an image type to a command to be executed to display
+a Face header.
 The command will be executed in a sub-shell asynchronously.
 The decoded field-body (actually a PNG data) will be piped to this command."
   :group 'lsdb
