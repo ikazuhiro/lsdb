@@ -74,19 +74,19 @@
 (defcustom lsdb-file-coding-system (find-coding-system 'ctext)
   "Coding system for `lsdb-file'."
   :group 'lsdb
-  :type 'symbol)
+  :type 'coding-system)
 
 (defcustom lsdb-sender-headers
   "From\\|Resent-From"
   "List of headers to search for senders."
   :group 'lsdb
-  :type 'list)
+  :type 'regexp)
 
 (defcustom lsdb-recipients-headers
   "Resent-To\\|Resent-Cc\\|Reply-To\\|To\\|Cc\\|Bcc"
   "List of headers to search for recipients."
   :group 'lsdb
-  :type 'list)
+  :type 'regexp)
 
 (defcustom lsdb-interesting-header-alist
   `(("Organization" nil organization)
@@ -105,7 +105,15 @@ The format of elements of this list should be
      (FIELD-NAME REGEXP ENTRY STRING)
 where the last three elements are optional."
   :group 'lsdb
-  :type 'list)
+  :type '(repeat (list (regexp :tag "Regexp for Field Header")
+		       (choice
+			(list :inline t :tag "Replace Field Value"
+			      (regexp :tag "Regexp for Field Value")
+			      (symbol :tag "LSDB's Entry Name")
+			      (string :tag "Replaced Value"))
+			(list :inline t :tag "Use Whole Field Value"
+			      (const nil)
+			      (symbol :tag "LSDB's Entry Name"))))))
 
 (defcustom lsdb-entry-type-alist
   '((net 5 ?,)
@@ -132,7 +140,22 @@ entry can have multiple values separated by commas.
 If the fourth element READ-ONLY is non-nil, it is assumed that the
 entry cannot be modified."
   :group 'lsdb
-  :type 'list)
+  :type '(repeat (list
+		  (symbol :tag "LSDB's Entry Name")
+		  (choice :tag "Definitions"
+			  (list :inline t :tag "Define All"
+				(number :tag "Score")
+				(choice :tag "Class"
+					(const :tag "?." ?.)
+					(const :tag "?," ?,))
+				(boolean :tag "Read Only"))
+			  (list :inline t :tag "Define Score and Class"
+				(number :tag "Score")
+				(choice :tag "Class"
+					(const :tag "?." ?.)
+					(const :tag "?," ?,)))
+			  (list :inline t :tag "Define Score Only"
+				(number :tag "Score"))))))
 
 (defcustom lsdb-decode-field-body-function
   #'mime-decode-field-body
@@ -171,7 +194,7 @@ The removed record is passed to each function as the argument."
   '(lsdb-address-cache)
   "List of the hash tables for reverse lookup"
   :group 'lsdb
-  :type 'list)
+  :type '(list variable))
 
 (defcustom lsdb-window-max-height 7
   "Maximum number of lines used to display LSDB record."
@@ -197,7 +220,10 @@ an X-Face header.
 The command will be executed in a sub-shell asynchronously.
 The compressed face will be piped to this command."
   :group 'lsdb
-  :type 'list)
+  :type '(repeat
+	  (cons (symbol :tag "Image Type")
+		(repeat (choice (string :tag "Command String")
+				(const :tag "Scale Factor" scale-factor))))))
 
 (defcustom lsdb-insert-x-face-function
   (if (or (image-type-available-p 'pbm)
@@ -226,7 +252,10 @@ a Face header.
 The command will be executed in a sub-shell asynchronously.
 The decoded field-body (actually a PNG data) will be piped to this command."
   :group 'lsdb
-  :type 'list)
+  :type '(repeat
+	  (cons (symbol :tag "Image Type")
+		(repeat (choice (string :tag "Command String")
+				(const :tag "Scale Factor" scale-factor))))))
 
 (defcustom lsdb-insert-face-function
   (if (or (image-type-available-p 'png)
