@@ -1673,12 +1673,11 @@ the user wants it."
 (defun lsdb-expose-x-face ()
   (let* ((record (get-text-property (point-min) 'lsdb-record))
 	 (x-face (cdr (assq 'x-face (cdr record))))
-	 (delimiter "\r "))
+	 (delimiter #("\r " 0 1 (invisible t))))
     (when (and lsdb-insert-x-face-function
 	       x-face)
       (goto-char (point-min))
       (end-of-line)
-      (put-text-property 0 1 'invisible t delimiter) ;hide "\r"
       (put-text-property
        (point)
        (progn
@@ -1760,12 +1759,11 @@ the user wants it."
 (defun lsdb-expose-face ()
   (let* ((record (get-text-property (point-min) 'lsdb-record))
 	 (face (cdr (assq 'face (cdr record))))
-	 (delimiter "\r "))
+	 (delimiter #("\r " 0 1 (invisible t))))
     (when (and lsdb-insert-face-function
 	       face)
       (goto-char (point-min))
       (end-of-line)
-      (put-text-property 0 1 'invisible t delimiter) ;hide "\r"
       (put-text-property
        (point)
        (progn
