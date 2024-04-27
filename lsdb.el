@@ -118,6 +118,7 @@ where the last three elements are optional."
 (defcustom lsdb-entry-type-alist
   '((net 5 ?,)
     (obsolete-net 4 ?,)
+    (multi-sender 4 ?.)
     (creation-date 2 ?. t)
     (last-modified 3 ?. t)
     (mailing-list 4 ?,)
@@ -191,7 +192,7 @@ The removed record is passed to each function as the argument."
   :type 'hook)
 
 (defcustom lsdb-secondary-hash-tables
-  '(lsdb-address-cache)
+  '(lsdb-address-cache lsdb-address-sender-cache)
   "List of the hash tables for reverse lookup"
   :group 'lsdb
   :type '(list variable))
@@ -366,6 +367,11 @@ Bourne shell or its equivalent \(not tcsh) is needed for \"2>\"."
   "The reverse lookup table for `lsdb-hash-table'.
 It represents address to full-name mapping.")
 
+(defvar lsdb-address-sender-cache nil
+  "The reverse lookup table for `lsdb-hash-table'.
+It represents address to sender name mapping, which doesn't conctain
+records that has Multi-Sender entry.")
+
 (defvar lsdb-buffer-name "*LSDB*"
   "Buffer name to display LSDB record.")
 
@@ -524,14 +530,22 @@ Overrides `temp-buffer-show-function'.")
 (defun lsdb-update-address-cache (record)
   (let ((net (delq nil (append (cdr (assq 'net record))
 			       (cdr (assq 'obsolete-net record))))))
-    (while net
-      (puthash (pop net) (car record) lsdb-address-cache))))
+    (if (assq 'multi-sender record)
+	(mapc (lambda (addr)
+		(puthash addr (car record) lsdb-address-cache)
+		(remhash addr lsdb-address-sender-cache))
+	      net)
+      (mapc (lambda (addr)
+	      (puthash addr (car record) lsdb-address-cache)
+	      (puthash addr (car record) lsdb-address-sender-cache))
+	    net))))
 
 (defun lsdb-delete-address-cache (record)
-  (let ((net (delq nil (append (cdr (assq 'net record))
-			       (cdr (assq 'obsolete-net record))))))
-    (while net
-      (remhash (pop net) lsdb-address-cache))))
+  (mapc (lambda (addr)
+	  (remhash addr lsdb-address-cache)
+	  (remhash addr lsdb-address-sender-cache))
+	(delq nil (append (cdr (assq 'net record))
+			  (cdr (assq 'obsolete-net record))))))
 
 ;;;_  , #2 Iterate on the All Records (very slow)
 (defun lsdb-lookup-full-name-by-fuzzy-matching (sender)
