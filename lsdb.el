@@ -44,6 +44,7 @@
 ;;; (add-hook 'wl-summary-mode-hook
 ;;;           (lambda ()
 ;;;             (define-key wl-summary-mode-map ":" 'lsdb-wl-toggle-buffer)))
+;;; (setq wl-summary-from-function 'wl-summary-lsdb-from)
 
 ;;; For Mew, put the following lines into your ~/.mew:
 ;;; (autoload 'lsdb-mew-insinuate "lsdb")
@@ -1525,6 +1526,48 @@ always hide."
 			  (split-window-vertically)))))
 	(set-window-buffer window buffer)
 	(lsdb-fit-window-to-buffer window)))))
+
+(declare-function elmo-message-entity-field
+		  "modb" (entity field &optional type))
+(declare-function wl-summary-buffer-folder-name "wl-summary" ())
+(declare-function wl-address-user-mail-address-p "wl-address" (address))
+(defvar wl-summary-showto-folder-regexp)
+(defvar wl-message-entity)
+
+(defun wl-summary-lsdb-from (from)
+  "Instance of `wl-summary-from-function'.
+Ordinarily returns the sender name. Returns recipient names if (1)
+summary's folder name matches with `wl-summary-showto-folder-regexp'
+and (2) sender address is yours."
+  (let ((translator
+	 (lambda (string)
+	   (let* ((components (std11-extract-address-components string))
+		  (name (car components))
+		  (address (cadr components)))
+	     (or (when (stringp address)
+		   (gethash address lsdb-address-sender-cache))
+		 ;; check from entry name
+		 (when (stringp name)
+		   (if (string-match "^\"\\(.+\\)\"$" name)
+		       (match-string 1 name)
+		     name))
+		 ;; check from entry address
+		 address
+		 ;; as is
+		 string))))
+	to ng)
+    (or (and (eq major-mode 'wl-summary-mode)
+	     (wl-address-user-mail-address-p from)
+	     wl-summary-showto-folder-regexp
+	     (string-match wl-summary-showto-folder-regexp
+			   (wl-summary-buffer-folder-name))
+	     (cond
+	      ((setq to (elmo-message-entity-field wl-message-entity 'to))
+	       (concat "To:" (mapconcat translator to ",")))
+	      ((setq ng (elmo-message-entity-field wl-message-entity
+						   'newsgroups))
+	       (concat "Ng:" ng))))
+	(funcall translator from))))
 
 ;;;_. Interface to Mew written by Hideyuki SHIRAI <shirai@meadowy.org>
 (eval-when-compile
