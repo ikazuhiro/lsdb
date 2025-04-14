@@ -1,9 +1,11 @@
-;;; lsdb.el --- the Lovely Sister Database  -*- lexical-binding: t -*-
+;;; lsdb.el --- A rolodex-like database program for SEMI based MUA. -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2002 Daiki Ueno
 
 ;; Author: Daiki Ueno <ueno@unixuser.org>
 ;; Keywords: address book
+;; Package-Requires: ((emacs "24.5") (apel "10.8") (flim "1.14.9"))
+;; Maintainer: Kazuhiro Ito <kzhr@d1.dion.ne.jp>
 
 ;; This file is part of the Lovely Sister Database.
 
