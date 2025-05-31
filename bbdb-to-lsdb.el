@@ -1,4 +1,4 @@
-;;; bbdb-to-lsdb.el --- the data conversion utility from BBDB to LSDB
+;;; bbdb-to-lsdb.el --- the data conversion utility from BBDB to LSDB -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2002 Daiki Ueno
 

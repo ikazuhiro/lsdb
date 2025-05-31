@@ -1,4 +1,4 @@
-;;; -*-Emacs-Lisp-*-
+;;; -*- mode: emacs-lisp; lexical-binding: nil -*-
 
 ;; LSDB-MK: installer for LSDB.
 

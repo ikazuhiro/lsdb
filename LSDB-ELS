@@ -1,4 +1,4 @@
-;;; -*-Emacs-Lisp-*-
+;;; -*- mode: emacs-lisp; lexical-binding: nil -*-
 
 ;; LSDB-ELS: list of LSDB modules to install
 
